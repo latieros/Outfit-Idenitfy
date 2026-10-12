@@ -584,7 +584,7 @@
   function loadHistory() { try { return JSON.parse(localStorage.getItem(LS.hist) || "[]"); } catch { return []; } }
   function saveHistory() {
     try { localStorage.setItem(LS.hist, JSON.stringify(history)); }
-    catch { history.shift(); try { localStorage.setItem(LS.hist, JSON.stringify(history)); } catch {} }
+    catch { if (history.length > 1) { history.shift(); try { localStorage.setItem(LS.hist, JSON.stringify(history)); } catch {} } }
   }
   function pushHistory(entry) { history.push(entry); while (history.length > 60) history.shift(); activeHist = history.length - 1; saveHistory(); }
   function renderHistory() {
