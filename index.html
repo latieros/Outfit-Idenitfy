@@ -63,10 +63,15 @@
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip {
     display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--chip); color: var(--chip-ink);
-    font-size: 13px; cursor: pointer; border: 1px solid transparent; user-select: none;
+    font-size: 13px; border: 1px solid transparent;
   }
   .chip.custom { background: var(--chip-custom); color: var(--chip-custom-ink); }
-  .chip.off { background: var(--chip-off); color: var(--chip-off-ink); text-decoration: line-through; }
+  .chip.off { background: var(--chip-off); color: var(--chip-off-ink); }
+  .chip.off a { text-decoration: line-through; }
+  .chip a { color: inherit; text-decoration: none; border-bottom: 1px dotted currentColor; }
+  .chip a:hover { border-bottom-style: solid; }
+  .chip .x { all: unset; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; opacity: 0.55; border-radius: 4px; }
+  .chip .x:hover, .chip .x:focus-visible { opacity: 1; outline: 1px solid currentColor; }
   .chip .conf { font-size: 11px; opacity: 0.7; }
   .group { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
   .group h3 { margin: 0 0 6px; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
@@ -198,7 +203,7 @@
       <div class="legend">
         <span><i style="background:var(--chip)"></i>canonical Danbooru tag</span>
         <span><i style="background:var(--chip-custom)"></i>custom / descriptive phrase</span>
-        <span>click a tag to exclude it from the prompt</span>
+        <span>tag opens its Danbooru wiki · × drops it from the prompt</span>
       </div>
       <div>
         <label>Prompt</label>
@@ -497,10 +502,18 @@
     const el = document.createElement("span");
     const key = tag;
     el.className = "chip" + (T.isCanonical(tag) ? "" : " custom") + (excluded.has(key) ? " off" : "");
-    el.textContent = tag;
+    // The tag itself links to its Danbooru wiki page; the × toggles it out of the prompt.
+    const a = document.createElement("a");
+    a.href = "https://danbooru.donmai.us/wiki_pages/" + encodeURIComponent(tag);
+    a.target = "_blank"; a.rel = "noopener"; a.textContent = tag;
+    a.title = (T.isCanonical(tag) ? "Danbooru tag" : "custom phrase, may have no wiki page") + (group ? " · " + group : "") + " · open wiki";
+    el.appendChild(a);
     if (conf != null) { const c = document.createElement("span"); c.className = "conf"; c.textContent = conf.toFixed(2); el.appendChild(c); }
-    el.title = (T.isCanonical(tag) ? "Danbooru tag" : "custom phrase") + (group ? " · " + group : "") + " · click to toggle";
-    el.addEventListener("click", () => { excluded.has(key) ? excluded.delete(key) : excluded.add(key); render(); });
+    const x = document.createElement("button"); x.type = "button"; x.className = "x"; x.textContent = excluded.has(key) ? "+" : "×";
+    x.title = excluded.has(key) ? "Put back in the prompt" : "Remove from the prompt";
+    x.setAttribute("aria-label", x.title);
+    x.addEventListener("click", (e) => { e.stopPropagation(); excluded.has(key) ? excluded.delete(key) : excluded.add(key); render(); });
+    el.appendChild(x);
     return el;
   }
 
