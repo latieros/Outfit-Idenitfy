@@ -186,6 +186,34 @@ window.OUTFIT_TAGS = {
     ]
   },
 
+  // Common misspellings and non-canonical spellings -> Danbooru canonical tag.
+  aliases: {
+    thigh_highs: "thighhighs", thigh_high_socks: "thighhighs", thighhigh: "thighhighs", knee_highs: "kneehighs", knee_high_socks: "kneehighs",
+    tshirt: "t-shirt", t_shirt: "t-shirt", tee: "t-shirt", tee_shirt: "t-shirt", hoody: "hoodie", sweat_shirt: "sweatshirt", jumper: "sweater",
+    trousers: "pants", slacks: "dress_pants", denim_jeans: "jeans", skinny_jeans: "jeans", mini_skirt: "miniskirt", skirt_pleated: "pleated_skirt",
+    high_heel: "high_heels", heels: "high_heels", stilettos: "stiletto_heels", trainers: "sneakers", running_shoes: "sneakers", tennis_shoes: "sneakers",
+    sun_glasses: "sunglasses", eyeglasses: "glasses", spectacles: "glasses", neck_tie: "necktie", tie: "necktie", bow_tie: "bowtie",
+    hair_band: "hairband", head_band: "headband", hair_clip: "hairclip", hair_tie: "hair_scrunchie", scrunchie: "hair_scrunchie",
+    pony_tail: "ponytail", twin_tails: "twintails", pig_tails: "twintails", twin_braids: "twin_braids", bun: "hair_bun", space_buns: "double_bun",
+    fringe: "bangs", blond_hair: "blonde_hair", gray_hair: "grey_hair", gray_eyes: "grey_eyes", silver_eyes: "grey_eyes", violet_eyes: "purple_eyes",
+    leather_jacket_black: "leather_jacket", jean_jacket: "denim_jacket", puffer_coat: "puffer_jacket", overcoat: "coat", trenchcoat: "trench_coat",
+    sailor_uniform: "serafuku", sailor_fuku: "serafuku", seifuku: "serafuku", school_girl_uniform: "school_uniform", gym_clothes: "gym_uniform",
+    maid_outfit: "maid", maid_dress: "maid", nurse_outfit: "nurse", witch_outfit: "witch", one_piece: "one-piece_swimsuit", swimwear: "swimsuit",
+    crop_tee: "crop_top", cropped_top: "crop_top", tanktop: "tank_top", cami: "camisole", button_down: "button_up", button_up_shirt: "button_up",
+    off_shoulder: "off-shoulder_shirt", off_the_shoulder: "off-shoulder_shirt", cold_shoulder: "off-shoulder_shirt", long_sleeve: "long_sleeves",
+    short_sleeve: "short_sleeves", sleeveless_top: "sleeveless_shirt", fingerless_glove: "fingerless_gloves", elbow_length_gloves: "elbow_gloves",
+    handbag_bag: "handbag", purse: "handbag", rucksack: "backpack", book_bag: "school_bag", hand_bag: "handbag",
+    plaid_pattern: "plaid", striped_pattern: "striped", stripes: "striped", polka_dots: "polka_dot", polkadot: "polka_dot", floral: "floral_print",
+    flower_print: "floral_print", leopard: "leopard_print", camo: "camouflage", checkerboard: "checkered", check_pattern: "checkered",
+    denim_fabric: "denim", lace_fabric: "lace", seethrough: "see-through", see_through: "see-through", sheer_fabric: "sheer",
+    full_body_shot: "full_body", upper_body_shot: "upper_body", waist_up: "upper_body", knees_up: "cowboy_shot", looking_at_camera: "looking_at_viewer",
+    "1_girl": "1girl", one_girl: "1girl", girl: "1girl", woman: "1girl", "1_boy": "1boy", one_boy: "1boy", boy: "1boy", man: "1boy", female: "1girl", male: "1boy"
+  },
+  canonicalize(tag) {
+    const n = this.normalize(tag);
+    return this.aliases[n] || n;
+  },
+
   // Helpers --------------------------------------------------------------
   all() {
     const s = new Set();

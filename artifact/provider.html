@@ -1,0 +1,27 @@
+    <div class="row">
+      <div>
+        <label for="tier">Claude tier</label>
+        <select id="tier">
+          <option value="default" selected>default (balanced)</option>
+          <option value="complex">complex (most capable, slower)</option>
+          <option value="quick">quick (fast, less careful)</option>
+        </select>
+      </div>
+      <div>
+        <label for="focus">Focus</label>
+        <select id="focus"><option value="full">Full: outfit + hair + body + framing</option><option value="outfit">Outfit only</option></select>
+      </div>
+    </div>
+    <div>
+      <label for="notes">Extra instructions (optional)</label>
+      <textarea id="notes" placeholder="e.g. 'treat as anime style', 'ignore the background', 'be specific about fabric'"></textarea>
+    </div>
+    <div class="row">
+      <button class="primary" id="run" disabled>Interpret outfit</button>
+      <button id="stop" class="small" hidden>Stop</button>
+    </div>
+    <div class="status" id="status">Waiting for an image.</div>
+    <details>
+      <summary>How this works</summary>
+      <p class="tiny">The page asks Claude through your own claude.ai account, so there is no API key to paste. The first run asks you to allow it, and the dialog notes that the page sends images to Claude. Images are downscaled before upload. Identical repeat runs within five minutes replay the cached answer; “Regenerate” forces a fresh read. Live Danbooru post counts are not available inside an artifact, so “Check tags” fixes spellings and marks vocabulary matches only.</p>
+    </details>

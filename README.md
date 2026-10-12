@@ -7,8 +7,10 @@ Danbooru-style tags grouped per garment, ready to paste into an image generator 
 
 | File | Purpose |
 |---|---|
-| `index.html` | The interpreter tool. Single page, no build step. |
-| `tags.js` | Danbooru-style tag vocabulary by category. Steers the model and classifies its output as canonical vs custom. |
+| `index.html` | The interpreter page: markup plus the API-key provider (Anthropic or OpenAI-compatible). |
+| `app.js` | Shared UI logic: interpretation, catalog, variants, tag checking, remix. Talks to a provider object. |
+| `tags.js` | Danbooru-style tag vocabulary by category, plus an alias table for common misspellings. |
+| `artifact/` | The claude.ai artifact provider (asks Claude through the viewer's account). `python3 build_artifact.py` builds the single-file artifact page. |
 
 ## Run it
 
@@ -33,6 +35,14 @@ Then:
 - Format switch: `danbooru` (underscores), `spaces`, or `weighted` which turns per-item confidence into `(tag:0.8..1.2)` weights.
 - Min confidence hides items the model was unsure about (hidden or cropped garments).
 - Copy the prompt, copy or download the JSON, and every run is saved to `localStorage["oti.history"]` with a thumbnail.
+
+## Features
+
+- **Catalog.** Every interpretation is saved with a thumbnail. Name it, add labels and notes, star it, and mark it "to try" or "done". Search across names, labels, notes and tags. Export and import as JSON to back up or move between browsers.
+- **Design 3 variants.** From any outfit, ask the model for three new outfits as tag sets: a restyle, a genre shift and a season/formality flip, or give your own direction. Open one to work on it, or save it straight to the catalog as "to try".
+- **Check tags.** Fixes alias spellings from `tags.js` (thigh_highs → thighhighs) and, in the repo version, looks every tag up on Danbooru to show post counts: green is common, orange under 5,000 posts, red under 500 or not found. Inside the artifact the live lookup is blocked, so only the alias fix and vocabulary match run.
+- **Remix.** Delete tags, add tags per garment, swap a garment for one from another saved outfit, add or remove garments, then update the outfit or save it as a copy.
+- **Copy outfit only** gives just the clothing and accessory tags for pasting onto an existing character prompt.
 
 ## How the model is called
 
