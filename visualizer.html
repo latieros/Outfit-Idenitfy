@@ -2,33 +2,377 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Outfit Tag Space</title>
-<meta name="description" content="3D view of saved outfit tags (coming next).">
+<meta name="description" content="Outfit tags laid out in 3D: clustered by category, sized by frequency, linked by co-occurrence.">
 <style>
-  :root { --bg: #f6f5f2; --ink: #1c1b1a; --muted: #6b6762; --panel: #fff; --line: #e4e1db; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141416; --ink: #ececea; --muted: #a09c96; --panel: #1d1d21; --line: #2d2d33; } }
-  :root[data-theme="dark"] { --bg: #141416; --ink: #ececea; --muted: #a09c96; --panel: #1d1d21; --line: #2d2d33; }
-  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
-  body { padding: 24px 16px; }
-  main { max-width: 720px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-  a { color: inherit; }
-  .muted { color: var(--muted); }
+  /* Layout: a full-height canvas with a slim control drawer on the left (stacks on top at phone width). */
+  :root {
+    --bg: #f6f5f2; --panel: #ffffffee; --ink: #1c1b1a; --muted: #6b6762; --line: #e4e1db;
+    --accent: #7a4de8; --accent-ink: #ffffff; --code: #f1efea; --warn: #c7731d;
+    --scene: #f3f1ec; --scene-fog: #f3f1ec; --edge: #8a8580; --hub: #3b2a73;
+    --sat: 62%; --light: 48%;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141416; --panel: #1d1d21ee; --ink: #ececea; --muted: #a09c96; --line: #2d2d33;
+      --accent: #9b7bff; --accent-ink: #0f0b1f; --code: #121215;
+      --scene: #0f0f12; --scene-fog: #0f0f12; --edge: #6c6a72; --hub: #d7cbff;
+      --sat: 70%; --light: 64%; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141416; --panel: #1d1d21ee; --ink: #ececea; --muted: #a09c96; --line: #2d2d33;
+    --accent: #9b7bff; --accent-ink: #0f0b1f; --code: #121215;
+    --scene: #0f0f12; --scene-fog: #0f0f12; --edge: #6c6a72; --hub: #d7cbff;
+    --sat: 70%; --light: 64%; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header nav { margin-left: auto; }
+  header nav a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--line); }
+  .wrap { flex: 1; display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; grid-template-rows: auto minmax(360px, 1fr); } }
+  aside { padding: 14px 16px; border-right: 1px solid var(--line); overflow: auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  @media (max-width: 860px) { aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 46vh; } }
+  label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+  textarea, select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--code); color: var(--ink); font: inherit; }
+  textarea { min-height: 120px; resize: vertical; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  button { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  button.small { padding: 4px 9px; font-size: 12.5px; }
+  button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .stage { position: relative; min-width: 0; min-height: 0; background: var(--scene); }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .info {
+    position: absolute; left: 12px; bottom: 12px; max-width: min(360px, calc(100% - 24px)); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; font-size: 13px; pointer-events: none; backdrop-filter: blur(6px);
+  }
+  .info b { font-size: 15px; }
+  .info .cat { display: inline-block; padding: 1px 8px; border-radius: 999px; color: #fff; font-size: 11.5px; margin-left: 6px; vertical-align: middle; }
+  .legend { display: flex; flex-wrap: wrap; gap: 5px 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .legend span.off { opacity: 0.4; text-decoration: line-through; }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .stats { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hintbar { position: absolute; top: 10px; right: 12px; font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; pointer-events: none; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .tiny { font-size: 12px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .info { transition: none; } }
 </style>
 </head>
 <body>
-<main>
-  <h1>3D tag space</h1>
-  <p class="muted">Next step. This page will load the results saved by the interpreter (<code>localStorage["oti.history"]</code>) and lay the tags out in 3D with three.js, grouped by category and linked by co-occurrence.</p>
-  <p id="count"></p>
-  <p><a href="index.html">← back to the interpreter</a></p>
-</main>
+<header>
+  <h1>Outfit Tag Space</h1>
+  <span class="sub">tags clustered by category · size = how often a tag appears · lines = worn together</span>
+  <nav><a href="./">← interpreter</a></nav>
+</header>
+
+<div class="wrap">
+  <aside>
+    <div>
+      <label for="input">Your tags · one outfit per line, comma separated</label>
+      <textarea id="input" spellcheck="false" placeholder="1girl, black_hair, leather_jacket, white_shirt, denim_shorts, black_thighhighs, sneakers"></textarea>
+    </div>
+    <div class="row">
+      <button class="primary" id="render">Visualize</button>
+      <button id="example" class="small">Load examples</button>
+      <button id="fromHistory" class="small">Load saved results</button>
+      <button id="clear" class="small">Clear</button>
+    </div>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" id="showLinks" checked> co-occurrence links</label>
+      <label class="toggle"><input type="checkbox" id="showLabels" checked> labels</label>
+      <label class="toggle"><input type="checkbox" id="spin" checked> slow spin</label>
+    </div>
+    <div>
+      <label for="linkMin">Only link pairs worn together at least</label>
+      <select id="linkMin">
+        <option value="1">1 time (every pair)</option>
+        <option value="2" selected>2 times</option>
+        <option value="3">3 times</option>
+      </select>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="legend" id="legend"></div>
+    <details>
+      <summary>How it is laid out</summary>
+      <p class="tiny">Each category gets a hub placed on a sphere. Its tags sit in a small cloud around that hub, and a tag that appears in more outfits gets a bigger sphere. Lines between tags mean they appeared in the same outfit; the threshold above keeps a single outfit from drawing every pair. Tags not in the vocabulary go to a “custom” cluster. Drag to orbit, scroll or pinch to zoom, hover or tap a node for details, click a node to pin it, click the legend to hide a category.</p>
+    </details>
+  </aside>
+
+  <div class="stage" id="stage">
+    <canvas id="c"></canvas>
+    <div class="hintbar">drag · scroll · tap a node</div>
+    <div class="info" id="info" hidden></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="tags.js"></script>
 <script>
-  try {
-    const h = JSON.parse(localStorage.getItem("oti.history") || "[]");
-    const tags = new Set(); h.forEach(e => (e.result?.outfit || []).forEach(o => o.tags.forEach(t => tags.add(t))));
-    document.getElementById("count").textContent = h.length ? `${h.length} saved result(s), ${tags.size} distinct outfit tags ready to visualize.` : "No saved results yet.";
-  } catch { document.getElementById("count").textContent = "No saved results yet."; }
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const T = window.OUTFIT_TAGS;
+  const CATS = [...T.categories, "custom"];
+  const HIST_KEY = "oti.history";
+  const DRAFT_KEY = "oti.vizDraft";
+
+  // ---------- examples ----------
+  const EXAMPLES = [
+    "1girl, solo, long_hair, black_hair, leather_jacket, white_shirt, denim_shorts, black_thighhighs, sneakers, streetwear, full_body, outdoors",
+    "1girl, solo, twintails, pink_hair, serafuku, pleated_skirt, white_shirt, red_neckerchief, kneehighs, loafers, school_uniform, upper_body",
+    "1boy, solo, short_hair, brown_hair, hoodie, hood_down, jeans, sneakers, backpack, headphones, streetwear, casual, street",
+    "1girl, solo, hair_bun, blonde_hair, sundress, floral_print, straw_hat, sandals, shoulder_bag, outdoors, day, smile",
+    "1girl, solo, bob_cut, white_hair, blazer, dress_shirt, necktie, pencil_skirt, black_pantyhose, high_heels, formal, office_lady, indoors",
+    "1girl, solo, long_hair, black_hair, gothic_lolita, frilled_dress, black_thighhighs, mary_janes, hair_bow, lace, choker, full_body",
+    "1boy, solo, undercut, black_hair, bomber_jacket, t-shirt, cargo_pants, combat_boots, fingerless_gloves, techwear, night, city",
+    "1girl, solo, ponytail, red_hair, crop_top, high-waist_pants, denim, sneakers, hoop_earrings, casual, cowboy_shot, white_background"
+  ];
+
+  // ---------- parsing ----------
+  function parseOutfits(text) {
+    return text.split(/\n+/).map(l => l.split(/[,，]/).map(T.normalize).filter(Boolean)).filter(l => l.length);
+  }
+  function outfitsFromHistory() {
+    let h = []; try { h = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch {}
+    return h.map(e => {
+      const r = e.result || {}; const s = r.subject || {};
+      return [s.count_tag, ...(s.body_tags || []), ...(s.hair_tags || []), ...(s.face_tags || []),
+        ...(r.outfit || []).flatMap(o => o.tags || []), ...(r.style_tags || []), ...(r.framing_tags || [])].map(T.normalize).filter(Boolean);
+    }).filter(l => l.length);
+  }
+  function buildGraph(outfits) {
+    const nodes = new Map(); // tag -> {tag, cat, count}
+    const pairs = new Map(); // "a|b" -> count
+    for (const o of outfits) {
+      const uniq = [...new Set(o)];
+      for (const t of uniq) {
+        const n = nodes.get(t) || { tag: t, cat: T.categoryOf(t) || "custom", count: 0 }; n.count++; nodes.set(t, n);
+      }
+      for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) {
+        const k = uniq[i] < uniq[j] ? uniq[i] + "|" + uniq[j] : uniq[j] + "|" + uniq[i];
+        pairs.set(k, (pairs.get(k) || 0) + 1);
+      }
+    }
+    return { nodes: [...nodes.values()], pairs, outfits: outfits.length };
+  }
+
+  // ---------- colors / theme ----------
+  const css = () => getComputedStyle(document.documentElement);
+  const catHue = (cat) => (CATS.indexOf(cat) * 137.508) % 360;      // golden-angle spread
+  const catColor = (cat) => cat === "custom" ? `hsl(30, 20%, ${css().getPropertyValue("--light").trim()})` : `hsl(${catHue(cat)}, ${css().getPropertyValue("--sat").trim()}, ${css().getPropertyValue("--light").trim()})`;
+  const cssColor = (v) => new THREE.Color(css().getPropertyValue(v).trim());
+
+  // ---------- three.js ----------
+  const canvas = $("c"), stage = $("stage");
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.9));
+  const key = new THREE.DirectionalLight(0xffffff, 0.6); key.position.set(30, 50, 40); scene.add(key);
+  const world = new THREE.Group(); scene.add(world);
+
+  // Orbit state (own minimal controls: three's OrbitControls is not on cdnjs).
+  const orbit = { theta: 0.6, phi: 1.15, dist: 90, target: new THREE.Vector3(), drag: false, lastX: 0, lastY: 0, pinch: 0, idle: 0 };
+  function applyCamera() {
+    orbit.phi = Math.max(0.15, Math.min(Math.PI - 0.15, orbit.phi)); orbit.dist = Math.max(15, Math.min(300, orbit.dist));
+    camera.position.set(
+      orbit.target.x + orbit.dist * Math.sin(orbit.phi) * Math.sin(orbit.theta),
+      orbit.target.y + orbit.dist * Math.cos(orbit.phi),
+      orbit.target.z + orbit.dist * Math.sin(orbit.phi) * Math.cos(orbit.theta));
+    camera.lookAt(orbit.target);
+  }
+  canvas.addEventListener("pointerdown", (e) => { orbit.drag = true; orbit.lastX = e.clientX; orbit.lastY = e.clientY; orbit.moved = 0; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", (e) => {
+    if (orbit.drag && e.buttons) {
+      const dx = e.clientX - orbit.lastX, dy = e.clientY - orbit.lastY; orbit.lastX = e.clientX; orbit.lastY = e.clientY;
+      orbit.theta -= dx * 0.006; orbit.phi -= dy * 0.006; orbit.moved += Math.abs(dx) + Math.abs(dy); orbit.idle = 0;
+    }
+    hover(e);
+  });
+  canvas.addEventListener("pointerup", (e) => { orbit.drag = false; if ((orbit.moved || 0) < 4) pick(e); });
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); orbit.dist *= 1 + Math.sign(e.deltaY) * 0.08; orbit.idle = 0; }, { passive: false });
+  canvas.addEventListener("touchstart", (e) => { if (e.touches.length === 2) orbit.pinch = dist2(e.touches); }, { passive: true });
+  canvas.addEventListener("touchmove", (e) => { if (e.touches.length === 2) { const d = dist2(e.touches); orbit.dist *= orbit.pinch / d; orbit.pinch = d; orbit.drag = false; } }, { passive: true });
+  const dist2 = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  // ---------- label sprites ----------
+  function labelSprite(text, color, size) {
+    const c = document.createElement("canvas"); const g = c.getContext("2d");
+    const font = `${size > 1 ? "600 " : ""}${Math.round(28 * (size > 1 ? 1.25 : 1))}px system-ui, sans-serif`;
+    g.font = font; const w = Math.ceil(g.measureText(text).width) + 24; c.width = w; c.height = 44;
+    g.font = font; g.textBaseline = "middle"; g.fillStyle = color; g.fillText(text, 12, 22);
+    const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    s.scale.set(w / 44 * 1.6 * size, 1.6 * size, 1); s.userData.base = s.scale.clone();
+    return s;
+  }
+
+  // ---------- layout ----------
+  function fib(i, n, r) { // fibonacci sphere point
+    const y = n === 1 ? 0 : 1 - (i / (n - 1)) * 2; const rad = Math.sqrt(1 - y * y); const th = i * 2.399963;
+    return new THREE.Vector3(Math.cos(th) * rad * r, y * r, Math.sin(th) * rad * r);
+  }
+  let graph = null, nodeMeshes = [], hubByCat = new Map(), linkLines = null, hubLines = null, hidden = new Set(), pinned = null;
+  const sphereGeo = new THREE.SphereGeometry(1, 20, 14);
+
+  function build(outfits) {
+    while (world.children.length) world.remove(world.children[0]);
+    nodeMeshes = []; hubByCat = new Map(); pinned = null; $("info").hidden = true;
+    graph = buildGraph(outfits);
+    const byCat = new Map(); for (const n of graph.nodes) { if (!byCat.has(n.cat)) byCat.set(n.cat, []); byCat.get(n.cat).push(n); }
+    const cats = CATS.filter(c => byCat.has(c));
+    const R = 14 + 4 * Math.sqrt(cats.length) + Math.sqrt(graph.nodes.length);
+    const edgeCol = cssColor("--edge"), hubCol = css().getPropertyValue("--hub").trim();
+    const hubPts = [];
+    cats.forEach((cat, ci) => {
+      const list = byCat.get(cat).sort((a, b) => b.count - a.count);
+      const hubPos = fib(ci, cats.length, R);
+      const col = new THREE.Color(catColor(cat));
+      const hub = labelSprite(cat.replace(/_/g, " "), hubCol, 1.4); hub.position.copy(hubPos); hub.userData = { hub: true, cat }; world.add(hub);
+      hubByCat.set(cat, { pos: hubPos, sprite: hub, nodes: [] });
+      const r = 3.5 + 1.1 * Math.sqrt(list.length) + 0.4 * list.length ** 0.5;
+      list.forEach((n, i) => {
+        const p = fib(i, list.length, r).add(hubPos);
+        const size = 0.45 + 0.35 * Math.sqrt(n.count);
+        const m = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.05 }));
+        m.position.copy(p); m.scale.setScalar(size); m.userData = { node: n, size, col };
+        world.add(m); nodeMeshes.push(m); hubByCat.get(cat).nodes.push(m);
+        const lab = labelSprite(n.tag, col.getStyle(), 1.25); lab.position.copy(p).add(new THREE.Vector3(0, size + 0.9, 0)); lab.userData.of = m; m.userData.label = lab; world.add(lab);
+        hubPts.push(hubPos.clone(), p.clone());
+      });
+    });
+    hubLines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(hubPts), new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: 0.18 }));
+    world.add(hubLines);
+    linkLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: 0.4 }));
+    world.add(linkLines);
+    rebuildLinks(); applyVisibility();
+    orbit.dist = R * 3.2; orbit.target.set(0, 0, 0); orbit.theta = 0.6; orbit.phi = 1.15;
+    renderLegend(cats, byCat);
+    const linkCount = [...graph.pairs.values()].filter(v => v >= Number($("linkMin").value)).length;
+    $("stats").textContent = `${graph.outfits} outfit${graph.outfits === 1 ? "" : "s"} · ${graph.nodes.length} tags · ${cats.length} categories · ${linkCount} links shown`;
+  }
+  const meshOf = new Map();
+  function rebuildLinks() {
+    if (!graph) return;
+    meshOf.clear(); nodeMeshes.forEach(m => meshOf.set(m.userData.node.tag, m));
+    const min = Number($("linkMin").value); const pts = [];
+    for (const [k, v] of graph.pairs) {
+      if (v < min) continue; const [a, b] = k.split("|"); const ma = meshOf.get(a), mb = meshOf.get(b);
+      if (!ma || !mb || hidden.has(ma.userData.node.cat) || hidden.has(mb.userData.node.cat)) continue;
+      if (pinned && ma !== pinned && mb !== pinned) continue;
+      pts.push(ma.position, mb.position);
+    }
+    linkLines.geometry.dispose(); linkLines.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+    linkLines.visible = $("showLinks").checked && pts.length > 0;
+    linkLines.material.opacity = pinned ? 0.9 : 0.4;
+  }
+  function applyVisibility() {
+    const labels = $("showLabels").checked;
+    nodeMeshes.forEach(m => { const v = !hidden.has(m.userData.node.cat); m.visible = v; m.userData.label.visible = v && labels; });
+    hubByCat.forEach((h, cat) => h.sprite.visible = !hidden.has(cat));
+    if (hubLines) hubLines.visible = true;
+    rebuildLinks();
+  }
+  function renderLegend(cats, byCat) {
+    const l = $("legend"); l.innerHTML = "";
+    cats.forEach(cat => {
+      const s = document.createElement("span"); s.innerHTML = `<i style="background:${catColor(cat)}"></i>${cat.replace(/_/g, " ")} (${byCat.get(cat).length})`;
+      if (hidden.has(cat)) s.classList.add("off");
+      s.addEventListener("click", () => { hidden.has(cat) ? hidden.delete(cat) : hidden.add(cat); s.classList.toggle("off"); applyVisibility(); });
+      l.appendChild(s);
+    });
+  }
+
+  // ---------- picking ----------
+  const ray = new THREE.Raycaster(); const ptr = new THREE.Vector2(); let hovered = null;
+  function castAt(e) {
+    const r = canvas.getBoundingClientRect(); ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera); const hit = ray.intersectObjects(nodeMeshes.filter(m => m.visible), false)[0]; return hit ? hit.object : null;
+  }
+  function hover(e) {
+    const m = castAt(e); canvas.style.cursor = m ? "pointer" : "";
+    if (m === hovered) return;
+    if (hovered && hovered !== pinned) hovered.scale.setScalar(hovered.userData.size);
+    hovered = m; if (m) { m.scale.setScalar(m.userData.size * 1.4); showInfo(m); } else if (pinned) showInfo(pinned); else $("info").hidden = true;
+  }
+  function pick(e) {
+    const m = castAt(e);
+    if (pinned && pinned !== m) { pinned.scale.setScalar(pinned.userData.size); pinned.material.emissive.setHex(0); }
+    pinned = (m && m !== pinned) ? m : null;
+    if (pinned) { pinned.scale.setScalar(pinned.userData.size * 1.5); pinned.material.emissive.set(pinned.userData.col).multiplyScalar(0.35); showInfo(pinned); orbit.target.copy(pinned.position); }
+    else { orbit.target.set(0, 0, 0); $("info").hidden = true; }
+    rebuildLinks();
+  }
+  function showInfo(m) {
+    const n = m.userData.node; const tag = n.tag;
+    const partners = []; for (const [k, v] of graph.pairs) { const [a, b] = k.split("|"); if (a === tag) partners.push([b, v]); else if (b === tag) partners.push([a, v]); }
+    partners.sort((a, b) => b[1] - a[1]);
+    const top = partners.slice(0, 8).map(([t, v]) => `${t}${graph.outfits > 1 ? " ×" + v : ""}`).join(", ");
+    $("info").innerHTML = `<b>${tag}</b><span class="cat" style="background:${catColor(n.cat)}">${n.cat.replace(/_/g, " ")}</span>
+      <div class="tiny">${T.isCanonical(tag) ? "Danbooru tag" : "custom tag"} · in ${n.count} of ${graph.outfits} outfit${graph.outfits === 1 ? "" : "s"}</div>
+      ${top ? `<div class="tiny" style="margin-top:4px">worn with: ${top}${partners.length > 8 ? " …" : ""}</div>` : ""}`;
+    $("info").hidden = false;
+  }
+
+  // ---------- loop ----------
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function frame() {
+    requestAnimationFrame(frame);
+    if ($("spin").checked && !orbit.drag && !reduced) { orbit.idle++; if (orbit.idle > 120) orbit.theta += 0.0015; }
+    applyCamera();
+    // keep labels readable: fade far ones slightly
+    if (nodeMeshes.length) for (const m of nodeMeshes) { const l = m.userData.label; if (l.visible) l.material.opacity = Math.max(0.45, Math.min(1, 1.7 - m.position.distanceTo(camera.position) / (orbit.dist * 1.4))); }
+    renderer.render(scene, camera);
+  }
+  function applyTheme() { scene.background = cssColor("--scene"); scene.fog = new THREE.Fog(cssColor("--scene-fog"), 60, 400); if (graph) build(lastOutfits); }
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---------- UI ----------
+  let lastOutfits = [];
+  function visualize(text) {
+    const outfits = parseOutfits(text);
+    if (!outfits.length) { $("stats").textContent = "Nothing to show. Paste some tags first."; return; }
+    lastOutfits = outfits; hidden = new Set(); build(outfits);
+    try { localStorage.setItem(DRAFT_KEY, text); } catch {}
+  }
+  $("render").addEventListener("click", () => visualize($("input").value));
+  $("example").addEventListener("click", () => { $("input").value = EXAMPLES.join("\n"); visualize($("input").value); });
+  $("fromHistory").addEventListener("click", () => {
+    const o = outfitsFromHistory();
+    if (!o.length) { $("stats").textContent = "No saved results found in this browser. Run the interpreter first, or paste tags."; return; }
+    $("input").value = o.map(l => l.join(", ")).join("\n"); visualize($("input").value);
+  });
+  $("clear").addEventListener("click", () => { $("input").value = ""; $("stats").textContent = ""; $("legend").innerHTML = ""; while (world.children.length) world.remove(world.children[0]); graph = null; nodeMeshes = []; $("info").hidden = true; });
+  $("showLinks").addEventListener("change", rebuildLinks);
+  $("linkMin").addEventListener("change", () => { rebuildLinks(); if (graph) $("stats").textContent = $("stats").textContent.replace(/\d+ links shown/, `${[...linkLines.geometry.attributes.position ? [linkLines.geometry.attributes.position.count / 2] : [0]][0]} links shown`); });
+  $("showLabels").addEventListener("change", applyVisibility);
+  $("input").addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") visualize($("input").value); });
+
+  // First view: the viewer's draft, else saved results, else the examples.
+  resize(); applyTheme();
+  let draft = ""; try { draft = localStorage.getItem(DRAFT_KEY) || ""; } catch {}
+  const saved = outfitsFromHistory();
+  if (draft.trim()) { $("input").value = draft; visualize(draft); }
+  else if (saved.length) { $("input").value = saved.map(l => l.join(", ")).join("\n"); visualize($("input").value); $("stats").textContent += " · loaded from saved results"; }
+  else { $("input").value = EXAMPLES.join("\n"); visualize($("input").value); $("stats").textContent += " · example outfits"; }
+  frame();
+})();
 </script>
 </body>
 </html>
