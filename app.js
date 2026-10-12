@@ -273,6 +273,12 @@ window.OTI = (() => {
     }).join(", ");
   }
   const promptText = (opts) => promptTextOf(result, opts);
+  // One group's tags, in the current format, skipping excluded tags and respecting the confidence cutoff.
+  function groupText(list, conf) {
+    const fmt = $("fmt").value, min = Number($("minConf").value);
+    if (conf != null && conf < min) return "";
+    return list.filter(t => !excluded.has(t)).map(t => { const f = fmtTag(t, fmt); if (fmt !== "weighted" || conf == null || conf >= 0.95) return f; return `(${f}:${(0.8 + conf * 0.4).toFixed(2)})`; }).join(", ");
+  }
 
   // ======================= render =======================
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -312,6 +318,10 @@ window.OTI = (() => {
       if (extra) h.appendChild(extra); d.appendChild(h);
       const c = document.createElement("div"); c.className = "chips"; list.forEach((t, i) => c.appendChild(chip(t, conf, title, () => onDelete(i))));
       if (remix) { const inp = document.createElement("input"); inp.type = "text"; inp.className = "addtag"; inp.placeholder = "+ add tag"; inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && inp.value.trim()) { const t = T.canonicalize(inp.value); if (t && !list.includes(t)) list.push(t); inp.value = ""; render(); } }); c.appendChild(inp); }
+      if (list.length) {
+        const cp = btn("copy", () => { const txt = groupText(list, conf); if (!txt) { setStatus("Nothing to copy: every tag in this group is excluded or under the confidence cutoff.", "warn"); return; } copy(txt, `Copied ${title}: ${txt}`); }, "small copygroup");
+        cp.title = "Copy this group's tags in the current format"; c.appendChild(cp);
+      }
       d.appendChild(c); g.appendChild(d);
     };
     const s = result.subject;
