@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outfit Tag Space</title>
+<meta name="description" content="3D view of saved outfit tags (coming next).">
+<style>
+  :root { --bg: #f6f5f2; --ink: #1c1b1a; --muted: #6b6762; --panel: #fff; --line: #e4e1db; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141416; --ink: #ececea; --muted: #a09c96; --panel: #1d1d21; --line: #2d2d33; } }
+  :root[data-theme="dark"] { --bg: #141416; --ink: #ececea; --muted: #a09c96; --panel: #1d1d21; --line: #2d2d33; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
+  body { padding: 24px 16px; }
+  main { max-width: 720px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  a { color: inherit; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>3D tag space</h1>
+  <p class="muted">Next step. This page will load the results saved by the interpreter (<code>localStorage["oti.history"]</code>) and lay the tags out in 3D with three.js, grouped by category and linked by co-occurrence.</p>
+  <p id="count"></p>
+  <p><a href="index.html">← back to the interpreter</a></p>
+</main>
+<script>
+  try {
+    const h = JSON.parse(localStorage.getItem("oti.history") || "[]");
+    const tags = new Set(); h.forEach(e => (e.result?.outfit || []).forEach(o => o.tags.forEach(t => tags.add(t))));
+    document.getElementById("count").textContent = h.length ? `${h.length} saved result(s), ${tags.size} distinct outfit tags ready to visualize.` : "No saved results yet.";
+  } catch { document.getElementById("count").textContent = "No saved results yet."; }
+</script>
+</body>
+</html>

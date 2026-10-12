@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outfit Tag Interpreter</title>
+<meta name="description" content="Upload a photo, let an AI model read the outfit, and get Danbooru-style tags for image generation.">
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1c1b1a; --muted: #6b6762; --line: #e4e1db;
+    --accent: #7a4de8; --accent-ink: #ffffff; --ok: #2f8f5b; --warn: #c7731d; --bad: #c7392f;
+    --chip: #efecf8; --chip-ink: #3b2a73; --chip-custom: #fff3e4; --chip-custom-ink: #7a4a10;
+    --chip-off: #f1f0ee; --chip-off-ink: #9a958e; --code: #f1efea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141416; --panel: #1d1d21; --ink: #ececea; --muted: #a09c96; --line: #2d2d33;
+      --accent: #9b7bff; --accent-ink: #0f0b1f; --chip: #2a2340; --chip-ink: #d7cbff;
+      --chip-custom: #3a2d1a; --chip-custom-ink: #f3c98a; --chip-off: #232327; --chip-off-ink: #6c6a66;
+      --code: #121215;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141416; --panel: #1d1d21; --ink: #ececea; --muted: #a09c96; --line: #2d2d33;
+    --accent: #9b7bff; --accent-ink: #0f0b1f; --chip: #2a2340; --chip-ink: #d7cbff;
+    --chip-custom: #3a2d1a; --chip-custom-ink: #f3c98a; --chip-off: #232327; --chip-off-ink: #6c6a66;
+    --code: #121215;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 0 16px 48px; }
+  header { max-width: 1180px; margin: 0 auto; padding: 24px 0 12px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); }
+  header nav { margin-left: auto; display: flex; gap: 12px; }
+  header nav a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--line); }
+  main { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 12px; }
+  .stack > * + * { margin-top: 12px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], input[type=password], select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit;
+  }
+  textarea { min-height: 72px; resize: vertical; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .row > * { flex: 1 1 140px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--muted); cursor: pointer;
+    transition: border-color .15s, background .15s; position: relative; min-height: 160px; display: grid; place-items: center;
+  }
+  .drop.over { border-color: var(--accent); background: var(--chip); }
+  .drop img { max-width: 100%; max-height: 420px; border-radius: 8px; display: block; }
+  .drop input { display: none; }
+  .hint { font-size: 12.5px; color: var(--muted); }
+  .status { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--code); min-height: 36px; white-space: pre-wrap; }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--bad); } .status.warn { color: var(--warn); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--chip); color: var(--chip-ink);
+    font-size: 13px; cursor: pointer; border: 1px solid transparent; user-select: none;
+  }
+  .chip.custom { background: var(--chip-custom); color: var(--chip-custom-ink); }
+  .chip.off { background: var(--chip-off); color: var(--chip-off-ink); text-decoration: line-through; }
+  .chip .conf { font-size: 11px; opacity: 0.7; }
+  .group { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+  .group h3 { margin: 0 0 6px; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .group h3 .meta { color: var(--muted); font-weight: normal; font-size: 12.5px; }
+  pre.out { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px; white-space: pre-wrap; word-break: break-word; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; max-height: 260px; overflow: auto; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .legend { display: flex; gap: 12px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .history { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .history img { height: 56px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); cursor: pointer; }
+  .history img.active { outline: 2px solid var(--accent); }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  .tiny { font-size: 12px; color: var(--muted); }
+  kbd { font: 12px ui-monospace, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Outfit Tag Interpreter</h1>
+  <span class="sub">photo → outfit breakdown → Danbooru-style prompt tags</span>
+  <nav>
+    <a href="visualizer.html" title="3D tag space (next step)">3D tag space</a>
+    <a href="https://danbooru.donmai.us/wiki_pages/tag_group:attire" target="_blank" rel="noopener">tag group: attire</a>
+  </nav>
+</header>
+
+<main>
+  <!-- LEFT: input -->
+  <section class="panel stack">
+    <h2>1. Photo</h2>
+    <div class="drop" id="drop" tabindex="0">
+      <input type="file" id="file" accept="image/*">
+      <div id="dropText">Drop an image here, click to browse, or paste from clipboard (<kbd>Ctrl</kbd>+<kbd>V</kbd>).</div>
+    </div>
+    <div class="hint" id="imgInfo"></div>
+
+    <h2 style="margin-top:20px">2. Model</h2>
+    <div class="row">
+      <div>
+        <label for="provider">Provider</label>
+        <select id="provider">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI-compatible (OpenAI, Ollama, LM Studio, OpenRouter…)</option>
+        </select>
+      </div>
+      <div>
+        <label for="model">Model</label>
+        <input type="text" id="model" list="models" placeholder="claude-opus-5-5">
+        <datalist id="models">
+          <option value="claude-opus-5-5"><option value="claude-sonnet-5-5"><option value="claude-haiku-5-5">
+          <option value="gpt-4o"><option value="llava"><option value="qwen2.5-vl">
+        </datalist>
+      </div>
+    </div>
+    <div id="openaiExtra" style="display:none">
+      <label for="baseUrl">Base URL (OpenAI-compatible)</label>
+      <input type="text" id="baseUrl" placeholder="https://api.openai.com/v1  or  http://localhost:11434/v1">
+    </div>
+    <div>
+      <label for="apiKey">API key <span class="tiny">(kept only in this browser's localStorage)</span></label>
+      <input type="password" id="apiKey" placeholder="sk-ant-… / sk-…" autocomplete="off">
+    </div>
+    <div class="row">
+      <div>
+        <label for="effort">Effort (Claude)</label>
+        <select id="effort">
+          <option value="low">low</option>
+          <option value="medium" selected>medium</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <div>
+        <label for="focus">Focus</label>
+        <select id="focus">
+          <option value="full">Full: outfit + hair + body + framing</option>
+          <option value="outfit">Outfit only (clothing + accessories)</option>
+        </select>
+      </div>
+    </div>
+    <div>
+      <label for="notes">Extra instructions (optional)</label>
+      <textarea id="notes" placeholder="e.g. 'treat as anime style', 'ignore the background', 'be specific about fabric'"></textarea>
+    </div>
+    <div class="row">
+      <button class="primary" id="run" disabled>Interpret outfit</button>
+      <button id="clearKey" class="small" title="Forget stored API key">Forget key</button>
+    </div>
+    <div class="status" id="status">Waiting for an image.</div>
+    <details>
+      <summary>About browser access and cost</summary>
+      <p class="tiny">
+        The page calls the model API directly from your browser, so the key is sent only to that provider.
+        Anthropic requires the <code>anthropic-dangerous-direct-browser-access</code> header for this; it's fine for a personal tool,
+        but don't host this page publicly with a key baked in. Each image is downscaled to 1568px on its longest side before upload.
+        Claude requests enable server-side refusal fallbacks by default.
+      </p>
+    </details>
+  </section>
+
+  <!-- RIGHT: output -->
+  <section class="panel stack" id="results">
+    <h2>3. Tags</h2>
+    <div class="row" id="outputControls" style="display:none">
+      <div style="flex: 0 1 auto">
+        <label>Format</label>
+        <select id="fmt">
+          <option value="danbooru">danbooru (underscores)</option>
+          <option value="spaces">spaces (SD / NAI style)</option>
+          <option value="weighted">weighted (tag:1.2) by confidence</option>
+        </select>
+      </div>
+      <div style="flex: 0 1 auto">
+        <label>Min confidence</label>
+        <select id="minConf">
+          <option value="0">all</option>
+          <option value="0.5" selected>≥ 0.5</option>
+          <option value="0.7">≥ 0.7</option>
+          <option value="0.9">≥ 0.9</option>
+        </select>
+      </div>
+      <div style="flex: 0 1 auto; align-self: end">
+        <button class="small" id="copyPrompt">Copy prompt</button>
+        <button class="small" id="copyJson">Copy JSON</button>
+        <button class="small" id="dlJson">Download JSON</button>
+      </div>
+    </div>
+    <div id="empty" class="empty">Results will show up here as grouped, toggleable tags.</div>
+    <div id="out" style="display:none" class="stack">
+      <div class="legend">
+        <span><i style="background:var(--chip)"></i>canonical Danbooru tag</span>
+        <span><i style="background:var(--chip-custom)"></i>custom / descriptive phrase</span>
+        <span>click a tag to exclude it from the prompt</span>
+      </div>
+      <div>
+        <label>Prompt</label>
+        <pre class="out" id="prompt"></pre>
+      </div>
+      <div>
+        <label>Model's description</label>
+        <div id="desc" class="tiny" style="color:var(--ink)"></div>
+      </div>
+      <div id="groups"></div>
+      <div>
+        <label>Suggested negative prompt</label>
+        <pre class="out" id="neg"></pre>
+      </div>
+      <details>
+        <summary>Raw JSON</summary>
+        <pre class="out" id="raw"></pre>
+      </details>
+    </div>
+
+    <div class="group">
+      <h3>History <span class="meta" id="histMeta"></span> <button class="small" id="clearHist" style="margin-left:auto">Clear</button></h3>
+      <div class="history" id="history"></div>
+      <p class="tiny">Every result is saved locally (image thumbnail + tags). The 3D tag space page will read from this same store.</p>
+    </div>
+  </section>
+</main>
+
+<script src="tags.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const T = window.OUTFIT_TAGS;
+  const LS = { key: "oti.apiKey", provider: "oti.provider", model: "oti.model", baseUrl: "oti.baseUrl", hist: "oti.history", effort: "oti.effort" };
+
+  // ---------- state ----------
+  let image = null;      // { dataUrl, mediaType, base64, w, h, name }
+  let result = null;     // parsed model output
+  let excluded = new Set();
+  let history = loadHistory();
+  let activeHist = -1;
+
+  // ---------- settings persistence ----------
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } }
+  $("apiKey").value = ls(LS.key) || "";
+  $("provider").value = ls(LS.provider) || "anthropic";
+  $("model").value = ls(LS.model) || "";
+  $("baseUrl").value = ls(LS.baseUrl) || "";
+  $("effort").value = ls(LS.effort) || "medium";
+  const syncProvider = () => {
+    const p = $("provider").value;
+    $("openaiExtra").style.display = p === "openai" ? "" : "none";
+    $("effort").parentElement.style.display = p === "anthropic" ? "" : "none";
+    $("model").placeholder = p === "anthropic" ? "claude-opus-5-5" : "gpt-4o";
+  };
+  syncProvider();
+  $("provider").addEventListener("change", () => { ls(LS.provider, $("provider").value); syncProvider(); });
+  $("model").addEventListener("change", () => ls(LS.model, $("model").value));
+  $("baseUrl").addEventListener("change", () => ls(LS.baseUrl, $("baseUrl").value));
+  $("apiKey").addEventListener("change", () => ls(LS.key, $("apiKey").value));
+  $("effort").addEventListener("change", () => ls(LS.effort, $("effort").value));
+  $("clearKey").addEventListener("click", () => { $("apiKey").value = ""; try { localStorage.removeItem(LS.key); } catch {} setStatus("API key forgotten.", "ok"); });
+
+  // ---------- image input ----------
+  const drop = $("drop");
+  drop.addEventListener("click", () => $("file").click());
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") $("file").click(); });
+  $("file").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+  ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) loadFile(f); });
+  window.addEventListener("paste", (e) => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+    if (item) loadFile(item.getAsFile());
+  });
+
+  async function loadFile(file) {
+    if (!file.type.startsWith("image/")) { setStatus("That file is not an image.", "bad"); return; }
+    setStatus("Loading image…");
+    try {
+      image = await prepareImage(file);
+      drop.innerHTML = `<img src="${image.dataUrl}" alt="uploaded outfit photo">`;
+      $("imgInfo").textContent = `${file.name} · ${image.w}×${image.h} · sent as ${image.mediaType} (${Math.round(image.base64.length * 0.75 / 1024)} KB)`;
+      $("run").disabled = false;
+      setStatus("Ready. Click “Interpret outfit”.");
+    } catch (err) {
+      setStatus("Could not read the image: " + err.message, "bad");
+    }
+  }
+
+  // Downscale to <=1568px on the longest side (Claude's sweet spot) and re-encode as JPEG,
+  // keeping PNG only for small images with transparency to avoid bloating the request.
+  function prepareImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1568;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        const mediaType = "image/jpeg";
+        const dataUrl = c.toDataURL(mediaType, 0.9);
+        // Square 96px thumbnail for the history strip.
+        const t = document.createElement("canvas"); t.width = t.height = 96;
+        const side = Math.min(w, h);
+        t.getContext("2d").drawImage(c, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 96, 96);
+        resolve({ dataUrl, mediaType, base64: dataUrl.split(",")[1], w, h, name: file.name, thumb: t.toDataURL("image/jpeg", 0.7) });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode failed")); };
+      img.src = url;
+    });
+  }
+
+  // ---------- prompt + schema ----------
+  const SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    required: ["description", "subject", "outfit", "style_tags", "framing_tags", "negative_prompt"],
+    properties: {
+      description: { type: "string", description: "Two or three sentences describing the outfit in plain language." },
+      subject: {
+        type: "object", additionalProperties: false,
+        required: ["count_tag", "body_tags", "hair_tags", "face_tags"],
+        properties: {
+          count_tag: { type: "string", description: "Danbooru subject-count tag such as 1girl, 1boy, 2girls, 1other, or empty if not a person." },
+          body_tags: { type: "array", items: { type: "string" } },
+          hair_tags: { type: "array", items: { type: "string" } },
+          face_tags: { type: "array", items: { type: "string" } }
+        }
+      },
+      outfit: {
+        type: "array",
+        description: "One entry per garment or accessory, head to toe.",
+        items: {
+          type: "object", additionalProperties: false,
+          required: ["category", "item", "color", "material", "pattern", "tags", "confidence"],
+          properties: {
+            category: { type: "string", enum: T.categories },
+            item: { type: "string", description: "Short human name, e.g. 'oversized black leather jacket'." },
+            color: { type: "string" },
+            material: { type: "string" },
+            pattern: { type: "string" },
+            tags: { type: "array", items: { type: "string" }, description: "Danbooru-style tags for this item, most specific first." },
+            confidence: { type: "number", description: "0 to 1, how sure you are the item/details are correct." }
+          }
+        }
+      },
+      style_tags: { type: "array", items: { type: "string" }, description: "Overall fashion style / aesthetic tags." },
+      framing_tags: { type: "array", items: { type: "string" }, description: "Pose, framing, setting and medium tags." },
+      negative_prompt: { type: "array", items: { type: "string" }, description: "Tags to put in a negative prompt to avoid misreads." }
+    }
+  };
+
+  function systemPrompt(focus) {
+    return [
+      "You are an expert fashion annotator for AI image generation (Stable Diffusion / NovelAI / Illustrious style prompting).",
+      "Look at the photo and break the outfit down into Danbooru-style tags.",
+      "Rules:",
+      "- Use Danbooru spelling: lowercase, underscores instead of spaces (e.g. pleated_skirt, black_thighhighs, off-shoulder_shirt).",
+      "- Prefer tags from the vocabulary below when they fit. When nothing fits, invent a precise short tag in the same style.",
+      "- Combine color + garment the Danbooru way where such tags exist (white_shirt, black_footwear, red_necktie).",
+      "- Separate items: one outfit entry per garment or accessory, head to toe. Include layering (jacket over shirt), fit (oversized, cropped, fitted), length and sleeve tags.",
+      "- Set confidence honestly: hidden, cropped or ambiguous items get lower confidence.",
+      focus === "outfit"
+        ? "- Focus on clothing and accessories only. Leave subject.hair_tags, subject.face_tags and subject.body_tags as empty arrays and framing_tags minimal."
+        : "- Also tag hair (length, style, color), face features and makeup, body type as far as visible, and framing/pose/setting.",
+      "- Never guess identity, age as a number, or name any real person.",
+      "- negative_prompt: 3 to 8 tags for things a generator would likely add wrongly (e.g. extra accessories, wrong garment).",
+      "",
+      "Vocabulary (category: tags):",
+      T.promptText()
+    ].join("\n");
+  }
+
+  function userText(notes) {
+    return "Analyze the outfit in this image and return the structured tag breakdown." + (notes ? "\n\nExtra instructions from the user: " + notes : "");
+  }
+
+  // ---------- providers ----------
+  async function callAnthropic({ apiKey, model, effort, notes, focus }) {
+    const body = {
+      model: model || "claude-opus-5-5",
+      max_tokens: 16000,
+      system: systemPrompt(focus),
+      fallbacks: "default",
+      output_config: { effort, format: { type: "json_schema", schema: SCHEMA } },
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: image.mediaType, data: image.base64 } },
+          { type: "text", text: userText(notes) }
+        ]
+      }]
+    };
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "server-side-fallback-2026-07-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Anthropic ${res.status}: ${data.error?.message || res.statusText}`);
+    if (data.stop_reason === "refusal") throw new Error("The model declined this image" + (data.stop_details?.category ? ` (${data.stop_details.category})` : "") + ".");
+    if (data.stop_reason === "max_tokens") throw new Error("Output was cut off (max_tokens). Try again or lower the detail.");
+    const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+    return { json: JSON.parse(text), servedBy: data.model, usage: data.usage };
+  }
+
+  async function callOpenAI({ apiKey, model, baseUrl, notes, focus }) {
+    const base = (baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const body = {
+      model: model || "gpt-4o",
+      max_tokens: 4000,
+      response_format: { type: "json_schema", json_schema: { name: "outfit_tags", schema: SCHEMA, strict: false } },
+      messages: [
+        { role: "system", content: systemPrompt(focus) },
+        { role: "user", content: [
+          { type: "image_url", image_url: { url: image.dataUrl } },
+          { type: "text", text: userText(notes) + "\nRespond with JSON only." }
+        ] }
+      ]
+    };
+    const headers = { "content-type": "application/json" };
+    if (apiKey) headers["authorization"] = "Bearer " + apiKey;
+    let res = await fetch(base + "/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
+    let data = await res.json().catch(() => ({}));
+    if (!res.ok && /response_format|json_schema/i.test(data.error?.message || "")) {
+      // Server does not support json_schema; fall back to plain json_object mode.
+      body.response_format = { type: "json_object" };
+      res = await fetch(base + "/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
+      data = await res.json().catch(() => ({}));
+    }
+    if (!res.ok) throw new Error(`${base} ${res.status}: ${data.error?.message || res.statusText}`);
+    const text = data.choices?.[0]?.message?.content || "";
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error("No JSON object in the model reply.");
+    return { json: JSON.parse(m[0]), servedBy: data.model, usage: data.usage };
+  }
+
+  // ---------- run ----------
+  $("run").addEventListener("click", async () => {
+    if (!image) return;
+    const provider = $("provider").value;
+    const apiKey = $("apiKey").value.trim();
+    if (provider === "anthropic" && !apiKey) { setStatus("Enter an Anthropic API key first.", "bad"); return; }
+    ls(LS.key, apiKey);
+    const args = { apiKey, model: $("model").value.trim(), baseUrl: $("baseUrl").value.trim(), effort: $("effort").value, notes: $("notes").value.trim(), focus: $("focus").value };
+    $("run").disabled = true;
+    setStatus("Asking the model… (usually 10–40 s)");
+    const t0 = performance.now();
+    try {
+      const r = provider === "anthropic" ? await callAnthropic(args) : await callOpenAI(args);
+      result = normalizeResult(r.json);
+      excluded = new Set();
+      const secs = ((performance.now() - t0) / 1000).toFixed(1);
+      const u = r.usage || {};
+      const tok = u.input_tokens != null ? ` · ${u.input_tokens} in / ${u.output_tokens} out tokens` : (u.total_tokens ? ` · ${u.total_tokens} tokens` : "");
+      setStatus(`Done in ${secs}s via ${r.servedBy || provider}${tok}.`, "ok");
+      pushHistory({ ts: Date.now(), thumb: image.thumb, name: image.name, provider, model: r.servedBy || args.model, result });
+      render();
+    } catch (err) {
+      console.error(err);
+      setStatus("Failed: " + err.message, "bad");
+    } finally {
+      $("run").disabled = false;
+    }
+  });
+
+  function normalizeResult(j) {
+    const norm = (arr) => (Array.isArray(arr) ? arr : []).map(T.normalize).filter(Boolean);
+    const subject = j.subject || {};
+    return {
+      description: j.description || "",
+      subject: {
+        count_tag: T.normalize(subject.count_tag || ""),
+        body_tags: norm(subject.body_tags), hair_tags: norm(subject.hair_tags), face_tags: norm(subject.face_tags)
+      },
+      outfit: (Array.isArray(j.outfit) ? j.outfit : []).map(o => ({
+        category: o.category || "accessories", item: o.item || "", color: o.color || "", material: o.material || "", pattern: o.pattern || "",
+        tags: norm(o.tags), confidence: Math.max(0, Math.min(1, Number(o.confidence) || 0))
+      })),
+      style_tags: norm(j.style_tags), framing_tags: norm(j.framing_tags), negative_prompt: norm(j.negative_prompt)
+    };
+  }
+
+  // ---------- render ----------
+  function chip(tag, conf, group) {
+    const el = document.createElement("span");
+    const key = tag;
+    el.className = "chip" + (T.isCanonical(tag) ? "" : " custom") + (excluded.has(key) ? " off" : "");
+    el.textContent = tag;
+    if (conf != null) { const c = document.createElement("span"); c.className = "conf"; c.textContent = conf.toFixed(2); el.appendChild(c); }
+    el.title = (T.isCanonical(tag) ? "Danbooru tag" : "custom phrase") + (group ? " · " + group : "") + " · click to toggle";
+    el.addEventListener("click", () => { excluded.has(key) ? excluded.delete(key) : excluded.add(key); render(); });
+    return el;
+  }
+
+  // Collect ordered (tag, confidence) pairs for the prompt. Subject first, then outfit, style, framing.
+  function orderedTags() {
+    if (!result) return [];
+    const seen = new Set(); const out = [];
+    const add = (t, c) => { if (!t || seen.has(t)) return; seen.add(t); out.push({ tag: t, conf: c }); };
+    add(result.subject.count_tag, 1);
+    result.subject.body_tags.forEach(t => add(t, 1));
+    result.subject.hair_tags.forEach(t => add(t, 1));
+    result.subject.face_tags.forEach(t => add(t, 1));
+    result.outfit.forEach(o => o.tags.forEach(t => add(t, o.confidence)));
+    result.style_tags.forEach(t => add(t, 0.8));
+    result.framing_tags.forEach(t => add(t, 1));
+    return out;
+  }
+
+  function promptText() {
+    const fmt = $("fmt").value, min = Number($("minConf").value);
+    return orderedTags()
+      .filter(x => !excluded.has(x.tag) && x.conf >= min)
+      .map(x => {
+        const t = fmt === "danbooru" ? x.tag : x.tag.replace(/_/g, " ");
+        if (fmt !== "weighted") return t;
+        const w = x.conf >= 0.95 ? null : (0.8 + x.conf * 0.4).toFixed(2); // 0.8..1.2
+        return w ? `(${t}:${w})` : t;
+      })
+      .join(", ");
+  }
+
+  function render() {
+    if (!result) return;
+    $("empty").style.display = "none"; $("out").style.display = ""; $("outputControls").style.display = "";
+    $("prompt").textContent = promptText();
+    $("desc").textContent = result.description;
+    const g = $("groups"); g.innerHTML = "";
+    const addGroup = (title, meta, tags, conf) => {
+      if (!tags.length) return;
+      const d = document.createElement("div"); d.className = "group";
+      const h = document.createElement("h3"); h.textContent = title;
+      if (meta) { const m = document.createElement("span"); m.className = "meta"; m.textContent = meta; h.appendChild(m); }
+      d.appendChild(h);
+      const c = document.createElement("div"); c.className = "chips";
+      tags.forEach(t => c.appendChild(chip(t, conf, title)));
+      d.appendChild(c); g.appendChild(d);
+    };
+    const s = result.subject;
+    addGroup("Subject", "", [s.count_tag, ...s.body_tags].filter(Boolean), null);
+    addGroup("Hair", "", s.hair_tags, null);
+    addGroup("Face", "", s.face_tags, null);
+    result.outfit.forEach(o => addGroup(o.item || o.category, `${o.category}${o.color ? " · " + o.color : ""}${o.material ? " · " + o.material : ""}${o.pattern && o.pattern !== "none" ? " · " + o.pattern : ""}`, o.tags, o.confidence));
+    addGroup("Style", "", result.style_tags, null);
+    addGroup("Framing / setting", "", result.framing_tags, null);
+    const fmtNeg = (t) => $("fmt").value === "danbooru" ? t : t.replace(/_/g, " ");
+    $("neg").textContent = result.negative_prompt.map(fmtNeg).join(", ");
+    $("raw").textContent = JSON.stringify(result, null, 2);
+    renderHistory();
+  }
+  $("fmt").addEventListener("change", render);
+  $("minConf").addEventListener("change", render);
+
+  $("copyPrompt").addEventListener("click", () => copy(promptText(), "Prompt copied."));
+  $("copyJson").addEventListener("click", () => copy(JSON.stringify(exportObj(), null, 2), "JSON copied."));
+  $("dlJson").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(exportObj(), null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = (image?.name || "outfit").replace(/\.[^.]+$/, "") + ".tags.json"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  function exportObj() {
+    return { ...result, prompt: promptText(), excluded: [...excluded], format: $("fmt").value, source_image: image?.name || null, exported_at: new Date().toISOString() };
+  }
+  async function copy(text, msg) {
+    try { await navigator.clipboard.writeText(text); setStatus(msg, "ok"); }
+    catch { setStatus("Clipboard blocked; select the text manually.", "warn"); }
+  }
+
+  // ---------- history (shared with the 3D visualizer) ----------
+  function loadHistory() { try { return JSON.parse(localStorage.getItem(LS.hist) || "[]"); } catch { return []; } }
+  function saveHistory() {
+    try { localStorage.setItem(LS.hist, JSON.stringify(history)); }
+    catch { history.shift(); try { localStorage.setItem(LS.hist, JSON.stringify(history)); } catch {} }
+  }
+  function pushHistory(entry) { history.push(entry); while (history.length > 60) history.shift(); activeHist = history.length - 1; saveHistory(); }
+  function renderHistory() {
+    const h = $("history"); h.innerHTML = "";
+    $("histMeta").textContent = history.length ? `${history.length} saved` : "empty";
+    history.forEach((e, i) => {
+      const img = document.createElement("img");
+      img.src = e.thumb || ""; img.alt = e.name || "saved result"; img.title = `${e.name || ""} · ${new Date(e.ts).toLocaleString()} · ${e.model || ""}`;
+      if (i === activeHist) img.classList.add("active");
+      img.addEventListener("click", () => { result = e.result; excluded = new Set(); activeHist = i; setStatus(`Loaded saved result from ${new Date(e.ts).toLocaleString()}.`, "ok"); render(); });
+      h.appendChild(img);
+    });
+  }
+  $("clearHist").addEventListener("click", () => { if (!history.length) return; if (!confirm("Delete all saved results?")) return; history = []; activeHist = -1; saveHistory(); renderHistory(); });
+  renderHistory();
+
+  function setStatus(msg, kind) { const s = $("status"); s.textContent = msg; s.className = "status" + (kind ? " " + kind : ""); }
+})();
+</script>
+</body>
+</html>
