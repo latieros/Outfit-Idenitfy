@@ -7,10 +7,8 @@ Danbooru-style tags grouped per garment, ready to paste into an image generator 
 
 | File | Purpose |
 |---|---|
-| `index.html` | The interpreter tool (step 1). Single page, no build step. |
+| `index.html` | The interpreter tool. Single page, no build step. |
 | `tags.js` | Danbooru-style tag vocabulary by category. Steers the model and classifies its output as canonical vs custom. |
-| `mannequin.html` | three.js mannequin dressed and posed by tags (hair, headwear, tops, outerwear, dresses, skirts, pants, legwear, shoes, accessories, colors, patterns, materials, poses, camera framing). |
-| `visualizer.html` | three.js tag-space view: tags clustered by category, sized by frequency, linked by co-occurrence. |
 
 ## Run it
 
@@ -42,8 +40,3 @@ Claude is called from the browser via the Messages API with the image as base64 
 a system prompt containing the tag vocabulary, and a JSON schema through `output_config.format` so the reply always parses.
 Server-side refusal fallbacks are enabled. Because the call is made from the browser, the request carries the
 `anthropic-dangerous-direct-browser-access` header. That is fine for a personal tool, but do not publish this page with a key in it.
-
-## 3D pages
-
-Both 3D pages load three.js r128 from cdnjs and read the interpreter's saved results from the same browser.
-`mannequin.html` lists which tags it understood and which it ignored; colors work as prefixes (`red_necktie`), and standalone pattern or material tags apply to the main garment.

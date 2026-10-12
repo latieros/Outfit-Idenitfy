@@ -89,8 +89,6 @@
   <h1>Outfit Tag Interpreter</h1>
   <span class="sub">photo → outfit breakdown → Danbooru-style prompt tags</span>
   <nav>
-    <a href="mannequin.html">3D mannequin</a>
-    <a href="visualizer.html">tag space</a>
     <a href="https://danbooru.donmai.us/wiki_pages/tag_group:attire" target="_blank" rel="noopener">tag group: attire</a>
   </nav>
 </header>
@@ -224,7 +222,7 @@
     <div class="group">
       <h3>History <span class="meta" id="histMeta"></span> <button class="small" id="clearHist" style="margin-left:auto">Clear</button></h3>
       <div class="history" id="history"></div>
-      <p class="tiny">Every result is saved locally (image thumbnail + tags). The 3D tag space page will read from this same store.</p>
+      <p class="tiny">Every result is saved locally (image thumbnail + tags).</p>
     </div>
   </section>
 </main>
@@ -581,7 +579,7 @@
     catch { setStatus("Clipboard blocked; select the text manually.", "warn"); }
   }
 
-  // ---------- history (shared with the 3D visualizer) ----------
+  // ---------- history ----------
   function loadHistory() { try { return JSON.parse(localStorage.getItem(LS.hist) || "[]"); } catch { return []; } }
   function saveHistory() {
     try { localStorage.setItem(LS.hist, JSON.stringify(history)); }
