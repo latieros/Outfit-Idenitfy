@@ -218,12 +218,15 @@ window.OTI = (() => {
     variants.forEach((v, i) => {
       const card = document.createElement("div"); card.className = "vcard";
       const tags = orderedTagsOf(v.result, true).map(x => x.tag);
-      card.innerHTML = `<h4>${esc(v.title)}</h4><div class="tiny">${esc(v.direction)}</div><div class="vtags">${tags.map(t => `<span class="chip mini${T.isCanonical(t) ? "" : " custom"}">${esc(t)}</span>`).join("")}</div>`;
+      // The outfit in plain English: the model's prose for this variant, else its description, else one built from the garment list.
+      const words = v.result.prose || v.result.description || C.composeProse(v.result);
+      card.innerHTML = `<h4>${esc(v.title)}</h4><p class="vdesc">${esc(words)}</p><div class="tiny">${esc(v.direction)}</div><div class="vtags">${tags.map(t => `<span class="chip mini${T.isCanonical(t) ? "" : " custom"}">${esc(t)}</span>`).join("")}</div>`;
       const row = document.createElement("div"); row.className = "row";
       const b1 = btn("Open", () => { result = clone(v.result); current = null; excluded = new Set(); remix = false; lookup = new Map(); $("outfitName").value = v.title; render(); setStatus(`Opened variant “${v.title}”. Save it to keep it.`, "ok"); });
       const b2 = btn("Save to catalog", () => { const e = addEntry({ name: v.title, notes: v.direction, thumb: current?.thumb || image?.thumb || "", source: "variant", parentId: current?.id || null, status: "try", result: clone(v.result) }); b2.textContent = "Saved ✓"; b2.disabled = true; renderCatalog(); setStatus(`Saved “${e.name}” to the catalog (marked “to try”).`, "ok"); });
       const b3 = btn("Copy prompt", () => copy(promptTextOf(v.result), "Variant prompt copied."));
-      row.append(b1, b2, b3); card.appendChild(row); out.appendChild(card);
+      const b4 = btn("Copy description", () => copy(words, "Variant description copied."));
+      row.append(b1, b2, b3, b4); card.appendChild(row); out.appendChild(card);
     });
   }
 
