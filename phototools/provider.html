@@ -1,0 +1,51 @@
+    <div id="claudeMode" hidden>
+      <div class="row">
+        <div><label for="tier">Claude model</label>
+          <select id="tier"><option value="default" selected>Balanced</option><option value="complex">Most capable, slower</option><option value="quick">Fastest</option></select></div>
+      </div>
+      <p class="tiny">Inside Claude this uses your own Claude account, so there's no key to paste. The first read asks you to allow it.</p>
+    </div>
+    <div id="keyMode">
+      <div class="row">
+        <div>
+          <label for="provider">Provider</label>
+          <select id="provider">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI-compatible (OpenAI, Ollama, LM Studio, OpenRouter…)</option>
+          </select>
+        </div>
+        <div>
+          <label for="model">Model</label>
+          <input type="text" id="model" list="models" placeholder="claude-opus-5-5">
+          <datalist id="models"><option value="claude-opus-5-5"><option value="claude-sonnet-5-5"><option value="claude-haiku-5-5"><option value="gpt-4o"><option value="qwen2.5-vl"></datalist>
+        </div>
+      </div>
+      <div id="openaiExtra" hidden>
+        <label for="baseUrl">Base URL (OpenAI-compatible)</label>
+        <input type="text" id="baseUrl" placeholder="https://api.openai.com/v1  or  http://localhost:11434/v1">
+      </div>
+      <div>
+        <label for="apiKey">API key <span class="tiny">(kept only in this browser)</span></label>
+        <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off">
+      </div>
+      <div class="row" id="effortWrap">
+        <div><label for="effort">Effort</label><select id="effort"><option value="low">Low (fastest)</option><option value="medium" selected>Medium</option><option value="high">High (most careful)</option></select></div>
+      </div>
+    </div>
+    <div class="row">
+      <div><label for="focus">Focus</label><select id="focus"><option value="full">Full: outfit, hair, body and framing</option><option value="outfit">Outfit only</option></select></div>
+    </div>
+    <div>
+      <label for="notes">Extra instructions (optional)</label>
+      <textarea id="notes" placeholder="e.g. 'treat as anime style', 'ignore the background', 'this is from Genshin Impact'"></textarea>
+    </div>
+    <div class="row tight">
+      <button class="primary" id="run" disabled>Interpret outfit</button>
+      <button id="stop" class="small" hidden>Stop</button>
+      <button id="clearKey" class="small" title="Forget the saved API key">Forget key</button>
+    </div>
+    <div class="status" id="status">Waiting for a photo.</div>
+    <details>
+      <summary>Where your photo goes</summary>
+      <p class="tiny">Unlike the other tools, this one sends the photo you pick to an AI model so it can read the outfit. On this site that's the provider you choose above, using your API key, which stays in this browser and goes only to that provider. Inside Claude it uses your Claude account instead. “Check tags” and character checks look the tags up on Danbooru. Calls with your own key are billed to that key's account.</p>
+    </details>

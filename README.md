@@ -13,6 +13,7 @@ It runs as a web page, as a claude.ai artifact, and as a Chrome/Brave extension 
 | `core.js` | Logic shared by every surface, with no DOM access: schemas, prompts, generator presets, prompt formatting, sentences, Danbooru identity checks. |
 | `tags.js` | Danbooru-style tag vocabulary by category, plus an alias table for common misspellings. |
 | `artifact/` | The claude.ai artifact provider, which asks Claude through the viewer's account. `python3 build_artifact.py` builds the single-file artifact page. |
+| `phototools/` | The provider for the Photo Tools copy: your API key on the website, your Claude account inside Claude. `python3 build_phototools.py /path/to/Photo-Tools-Personal` writes `outfit-tags.html` into that suite, matching its header, switcher and look. |
 | `extension/` | The browser extension: service worker, on-page panel, options page and the provider for its bundled copy of the page. `python3 build_extension.py` builds `dist/outfit-tag-extension/` and a zip. |
 
 ## Run the page
