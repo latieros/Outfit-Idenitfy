@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outfit Tag Interpreter settings</title>
+<style>
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1c1b1a; --muted:#6b6762; --line:#e4e1db; --accent:#7a4de8; --accent-ink:#fff; --ok:#2f8f5b; --bad:#c7392f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141416; --panel:#1d1d21; --ink:#ececea; --muted:#a09c96; --line:#2d2d33; --accent:#9b7bff; --accent-ink:#0f0b1f; color-scheme: dark; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px 16px; }
+  main { max-width: 560px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 20px; margin: 0; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, select { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; } .row > div { flex: 1 1 160px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tiny { font-size: 12.5px; color: var(--muted); margin: 0; }
+  #saved { color: var(--ok); font-size: 13px; }
+  ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13.5px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Outfit Tag Interpreter</h1>
+  <ol>
+    <li>Right-click an image and choose <b>Read outfit tags</b> for a quick panel on the page.</li>
+    <li>Choose <b>Open in Outfit Tag Interpreter</b> to get the full tool with catalog, variants and remix.</li>
+    <li>Choose <b>Add to outfit queue</b> on up to 5 images, from any pages, then click the toolbar button to read them together.</li>
+    <li>Right-click an empty spot and choose <b>Read all outfits on this page</b> to tag a whole gallery.</li>
+  </ol>
+  <div>
+    <label for="apiKey">Anthropic API key</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off">
+    <p class="tiny">Stored in this browser's extension storage and sent only to api.anthropic.com.</p>
+  </div>
+  <div class="row">
+    <div><label for="model">Model</label><input type="text" id="model" list="models" placeholder="claude-opus-5-5">
+      <datalist id="models"><option value="claude-opus-5-5"><option value="claude-sonnet-5-5"><option value="claude-haiku-5-5"></datalist></div>
+    <div><label for="effort">Effort</label><select id="effort"><option value="low">low (fastest)</option><option value="medium">medium</option><option value="high">high (most careful)</option></select></div>
+  </div>
+  <div class="row">
+    <div><label for="focus">Focus</label><select id="focus"><option value="full">Full: outfit + hair + body + framing</option><option value="outfit">Outfit only</option></select></div>
+    <div><label for="batchMax">Most images per page batch</label><input type="number" id="batchMax" min="1" max="40"></div>
+  </div>
+  <details>
+    <summary>Advanced</summary>
+    <div style="margin-top:8px"><label for="apiBase">API base URL</label><input type="text" id="apiBase" placeholder="https://api.anthropic.com"><p class="tiny">Only change this to route through your own proxy.</p></div>
+  </details>
+  <div style="display:flex; gap:10px; align-items:center"><button class="primary" id="save">Save</button><button id="openTool">Open the interpreter</button><span id="saved"></span></div>
+</main>
+<script src="claude.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

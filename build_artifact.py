@@ -22,7 +22,7 @@ page = between(html, "<!-- page:start -->", "<!-- page:end -->").strip()
 body = between(html, "<!-- body:start -->", "<!-- body:end -->")
 body = body.replace(between(body, "<!-- provider:start -->", "<!-- provider:end -->"), "\n" + (root / "artifact/provider.html").read_text())
 scripts = "\n".join(
-    f"<script>\n{(root / f).read_text()}\n</script>" for f in ("tags.js", "app.js", "artifact/provider.js")
+    f"<script>\n{(root / f).read_text()}\n</script>" for f in ("tags.js", "core.js", "app.js", "artifact/provider.js")
 )
 out = re.sub(r"\s*<!-- [a-z-]+:(start|end) -->", "", f"{page}\n{body}\n{scripts}\n")
 assert 'id="apiKey"' not in out and "OTI_PROVIDER" in out

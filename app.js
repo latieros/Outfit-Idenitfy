@@ -11,99 +11,13 @@ window.OTI = (() => {
   const $ = (id) => document.getElementById(id);
   const T = window.OUTFIT_TAGS;
   const P = () => window.OTI_PROVIDER;
-  const LS = { catalog: "oti.history", fmt: "oti.fmt", minConf: "oti.minConf" };
+  const LS = { catalog: "oti.history", fmt: "oti.fmt", minConf: "oti.minConf", preset: "oti.preset", overrides: "oti.presetOverrides" };
 
-  // ======================= schemas =======================
-  const ITEM_SCHEMA = {
-    type: "object", additionalProperties: false,
-    required: ["category", "item", "color", "material", "pattern", "tags", "confidence"],
-    properties: {
-      category: { type: "string", enum: T.categories },
-      item: { type: "string", description: "Short human name, e.g. 'oversized black leather jacket'." },
-      color: { type: "string" }, material: { type: "string" }, pattern: { type: "string" },
-      tags: { type: "array", items: { type: "string" }, description: "Danbooru-style tags for this item, most specific first." },
-      confidence: { type: "number", description: "0 to 1." }
-    }
-  };
-  const SCHEMA = {
-    type: "object", additionalProperties: false,
-    required: ["description", "subject", "outfit", "style_tags", "framing_tags", "negative_prompt"],
-    properties: {
-      description: { type: "string", description: "Two or three sentences describing the outfit in plain language." },
-      subject: {
-        type: "object", additionalProperties: false, required: ["count_tag", "body_tags", "hair_tags", "face_tags"],
-        properties: {
-          count_tag: { type: "string", description: "1girl, 1boy, 2girls, 1other, or empty if not a person." },
-          body_tags: { type: "array", items: { type: "string" } }, hair_tags: { type: "array", items: { type: "string" } }, face_tags: { type: "array", items: { type: "string" } }
-        }
-      },
-      outfit: { type: "array", description: "One entry per garment or accessory, head to toe.", items: ITEM_SCHEMA },
-      style_tags: { type: "array", items: { type: "string" } },
-      framing_tags: { type: "array", items: { type: "string" } },
-      negative_prompt: { type: "array", items: { type: "string" } }
-    }
-  };
-  const VARIANTS_SCHEMA = {
-    type: "object", additionalProperties: false, required: ["variants"],
-    properties: {
-      variants: {
-        type: "array",
-        items: {
-          type: "object", additionalProperties: false,
-          required: ["title", "direction", "description", "outfit", "style_tags", "negative_prompt"],
-          properties: {
-            title: { type: "string", description: "Short catchy name for the outfit, 2-5 words." },
-            direction: { type: "string", description: "One line: what was changed and why." },
-            description: { type: "string" },
-            outfit: { type: "array", items: ITEM_SCHEMA },
-            style_tags: { type: "array", items: { type: "string" } },
-            negative_prompt: { type: "array", items: { type: "string" } }
-          }
-        }
-      }
-    }
-  };
-
-  // ======================= prompts =======================
-  const RULES = [
-    "Use Danbooru spelling: lowercase, underscores instead of spaces (pleated_skirt, black_thighhighs, off-shoulder_shirt).",
-    "Prefer tags from the vocabulary below when they fit. When nothing fits, invent a precise short tag in the same style.",
-    "Combine color + garment the Danbooru way where such tags exist (white_shirt, black_footwear, red_necktie).",
-    "One outfit entry per garment or accessory, head to toe. Include layering, fit (oversized, cropped, fitted), length and sleeve tags.",
-    "The tags are for anime-style image generation (Illustrious / NoobAI / NovelAI), so translate real-world garments into the tags those models know."
-  ];
-  function interpretPrompt(focus, notes) {
-    return [
-      "You are an expert fashion annotator for anime-style AI image generation.",
-      "Look at the photo and break the outfit down into Danbooru-style tags.",
-      "Rules:", ...RULES.map(r => "- " + r),
-      "- Set confidence honestly: hidden, cropped or ambiguous items get lower confidence.",
-      focus === "outfit"
-        ? "- Focus on clothing and accessories only. Leave subject.hair_tags, subject.face_tags and subject.body_tags as empty arrays and framing_tags minimal."
-        : "- Also tag hair (length, style, color), face features and makeup, body type as far as visible, and framing/pose/setting.",
-      "- Never guess identity, age as a number, or name any real person.",
-      "- negative_prompt: 3 to 8 tags for things a generator would likely add wrongly.",
-      "", "Vocabulary (category: tags):", T.promptText(),
-      "", "Analyze the outfit in this image and return the structured tag breakdown." + (notes ? "\n\nExtra instructions from the user: " + notes : "")
-    ].join("\n");
-  }
-  function variantsPrompt(result, direction) {
-    const base = { subject: result.subject, outfit: result.outfit.map(o => ({ category: o.category, item: o.item, color: o.color, material: o.material, pattern: o.pattern, tags: o.tags })), style_tags: result.style_tags };
-    return [
-      "You are a fashion designer for anime-style AI art. Starting from this outfit breakdown, design THREE new outfits as Danbooru tag sets. The goal is to discover new outfits to draw.",
-      "Rules:", ...RULES.map(r => "- " + r),
-      "- Keep the subject (count, body, hair) as given; change clothing, accessories and style.",
-      "- Each variant must be a complete, coherent, wearable outfit: top or dress, bottom if needed, footwear, legwear where it fits, 1-3 accessories.",
-      "- Make the three variants clearly different from each other and from the original.",
-      direction
-        ? "- The user asked for this direction, apply it to all three: " + direction
-        : "- Variant 1 'Restyle': same silhouette and layering, a different aesthetic (e.g. gothic, preppy, techwear, retro). Variant 2 'Genre shift': push the outfit into a fitting fantasy, sci-fi, idol, military or traditional genre. Variant 3 'Flip': change season and formality (summer to winter, casual to formal or the reverse).",
-      "- confidence: how well the tags are known to generators (common Danbooru tags high, invented tags low).",
-      "", "Vocabulary (category: tags):", T.promptText(),
-      "", "Original outfit JSON:", JSON.stringify(base),
-      "", "Return the three variants."
-    ].join("\n");
-  }
+  const C = self.OTI_CORE;
+  const { SCHEMA, VARIANTS_SCHEMA, interpretPrompt, variantsPrompt, normalizeResult } = C;
+  // Storage goes through the provider when it supplies one (the extension uses chrome.storage), else localStorage.
+  const defaultStore = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => localStorage.setItem(k, v) };
+  const store = () => (P() && P().store) || defaultStore;
 
   // ======================= state =======================
   let image = null;       // { dataUrl, mediaType, blob, w, h, name, thumb }
@@ -111,40 +25,28 @@ window.OTI = (() => {
   let current = null;     // catalog entry currently loaded (or null if unsaved)
   let excluded = new Set();
   let remix = false;
-  let catalog = loadCatalog();
+  let catalog = [];        // loaded in init(), once the provider (and its storage) exists
   let lookup = new Map();  // tag -> { post_count, category } from live lookup
   let filter = { q: "", view: "all" };
 
-  const norm = (arr) => (Array.isArray(arr) ? arr : []).map(T.normalize).filter(Boolean);
-  function normalizeResult(j) {
-    const subject = j.subject || {};
-    return {
-      description: j.description || "",
-      subject: { count_tag: T.normalize(subject.count_tag || ""), body_tags: norm(subject.body_tags), hair_tags: norm(subject.hair_tags), face_tags: norm(subject.face_tags) },
-      outfit: (Array.isArray(j.outfit) ? j.outfit : []).map(o => ({
-        category: T.categories.includes(o.category) ? o.category : "accessories", item: o.item || "", color: o.color || "", material: o.material || "", pattern: o.pattern || "",
-        tags: norm(o.tags), confidence: Math.max(0, Math.min(1, Number(o.confidence) || 0))
-      })),
-      style_tags: norm(j.style_tags), framing_tags: norm(j.framing_tags), negative_prompt: norm(j.negative_prompt)
-    };
-  }
   const clone = (x) => JSON.parse(JSON.stringify(x));
 
   // ======================= status =======================
   function setStatus(msg, kind) { const s = $("status"); s.textContent = msg; s.className = "status" + (kind ? " " + kind : ""); }
-  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } }
+  function ls(k, v) { try { if (v === undefined) return store().get(k); store().set(k, v); } catch { return null; } }
 
   // ======================= image input =======================
   function bindImageInput() {
     const drop = $("drop");
-    $("file").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+    $("file").addEventListener("change", async (e) => { await loadFiles(e.target.files); e.target.value = ""; });
     ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
     ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-    drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) loadFile(f); });
+    drop.addEventListener("drop", (e) => { if (e.dataTransfer.files && e.dataTransfer.files.length) loadFiles(e.dataTransfer.files); });
     window.addEventListener("paste", (e) => { const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/")); if (item) loadFile(item.getAsFile()); });
     $("pickBtn").addEventListener("click", () => { try { $("file").click(); } catch {} });
+    $("clearQueue").addEventListener("click", clearQueue);
     let pickerTimer = null;
-    $("file").addEventListener("click", () => { setStatus("Opening the file picker…"); clearTimeout(pickerTimer); pickerTimer = setTimeout(() => { if (!image) setStatus("No file picker appeared. This viewer may not support uploads. Open the link in a browser, or paste an image into the box below.", "warn"); }, 4000); });
+    $("file").addEventListener("click", () => { setStatus("Opening the file picker…"); clearTimeout(pickerTimer); pickerTimer = setTimeout(() => { if (!queue.length) setStatus("No file picker appeared. This viewer may not support uploads. Open the link in a browser, or paste an image into the box below.", "warn"); }, 4000); });
     $("file").addEventListener("change", () => clearTimeout(pickerTimer));
     const pasteBox = $("pasteBox");
     pasteBox.addEventListener("paste", (e) => {
@@ -152,18 +54,6 @@ window.OTI = (() => {
       if (f) { e.preventDefault(); pasteBox.textContent = ""; loadFile(f); return; }
       setTimeout(() => { const img = pasteBox.querySelector("img"); if (img && img.src.startsWith("data:image/")) fetch(img.src).then(r => r.blob()).then(b => loadFile(new File([b], "pasted." + (b.type.split("/")[1] || "png"), { type: b.type }))).catch(() => setStatus("Could not read the pasted image.", "bad")); pasteBox.textContent = ""; }, 50);
     });
-  }
-  async function loadFile(file) {
-    if (!file.type.startsWith("image/")) { setStatus("That file is not an image.", "bad"); return; }
-    setStatus("Loading image…");
-    try {
-      image = await prepareImage(file);
-      $("drop").classList.add("has-image");
-      $("dropText").innerHTML = `<img src="${image.dataUrl}" alt="uploaded outfit photo">`;
-      $("imgInfo").textContent = `${file.name} · ${image.w}×${image.h} · ${Math.round(image.blob.size / 1024)} KB`;
-      $("run").disabled = false; $("run").textContent = "Interpret outfit"; $("run").dataset.ran = "0";
-      setStatus("Ready. Click “Interpret outfit”.");
-    } catch (err) { setStatus("Could not read the image: " + err.message, "bad"); }
   }
   function prepareImage(file) {
     return new Promise((resolve, reject) => {
@@ -184,20 +74,128 @@ window.OTI = (() => {
   }
 
   // ======================= interpret =======================
-  async function run() {
-    if (!image) return;
-    if (!(await P().ready())) { setStatus(P().unavailableMessage || "The model provider is not available.", "bad"); return; }
-    $("run").disabled = true; setStatus("Thinking… (usually 10–60 s)");
-    const t0 = performance.now();
+  // ======================= queue =======================
+  // Up to QUEUE_MAX photos wait here; "Interpret" reads every waiting one in turn,
+  // and the photo tabs above the tags switch which outfit the page works on.
+  const QUEUE_MAX = 5;
+  let queue = [];        // [{ id, image, name, status: waiting|reading|done|failed, result, entryId, excluded, error }]
+  let selected = null;   // the queue item shown in the results, or null (e.g. a catalog entry is open)
+  let busy = false;
+
+  async function loadFile(file, context) {
+    if (!file || !file.type || !file.type.startsWith("image/")) { setStatus("That file is not an image.", "bad"); return false; }
+    if (queue.length >= QUEUE_MAX) { setStatus(`The queue holds ${QUEUE_MAX} outfits. Remove one to add another.`, "warn"); return false; }
+    setStatus("Loading image…");
     try {
-      const r = await P().interpret({ image, prompt: interpretPrompt($("focus").value, $("notes").value.trim()), schema: SCHEMA, fresh: $("run").dataset.ran === "1" });
-      result = normalizeResult(r.json); excluded = new Set(); remix = false; lookup = new Map();
-      current = addEntry({ name: (image.name || "outfit").replace(/\.[^.]+$/, ""), thumb: image.thumb, source: "photo", model: r.servedBy, result });
-      $("run").dataset.ran = "1"; $("run").textContent = "Regenerate";
-      setStatus(`Done in ${((performance.now() - t0) / 1000).toFixed(1)}s via ${r.servedBy}. Saved to the catalog.`, "ok");
-      render();
-    } catch (e) { console.error(e); setStatus(P().errorMessage ? P().errorMessage(e) : ("Failed: " + (e.message || e.code || e)), "bad"); }
-    finally { $("run").disabled = false; }
+      const img = await prepareImage(file);
+      const item = { id: "q" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), image: img, name: (file.name || "outfit").replace(/\.[^.]+$/, ""), status: "waiting", result: null, entryId: null, excluded: new Set(), error: "", context: context || null };
+      queue.push(item);
+      $("imgInfo").textContent = `${file.name} · ${img.w}×${img.h} · ${Math.round(img.blob.size / 1024)} KB`;
+      if (!busy && (!selected || !selected.result)) select(item); else renderQueue();
+      const waiting = queue.filter(q => q.status === "waiting").length;
+      setStatus(`${waiting} waiting in the queue. Click “${runLabel()}”.`);
+      return true;
+    } catch (err) { setStatus("Could not read the image: " + err.message, "bad"); return false; }
+  }
+  async function loadFiles(files) {
+    const list = [...files].filter(f => f.type && f.type.startsWith("image/"));
+    const room = QUEUE_MAX - queue.length;
+    for (const f of list.slice(0, Math.max(0, room))) await loadFile(f);
+    if (list.length > room) setStatus(`Added ${Math.max(0, room)} of ${list.length}: the queue holds ${QUEUE_MAX} outfits.`, "warn");
+  }
+  function runLabel() {
+    const n = queue.filter(q => q.status === "waiting" || q.status === "failed").length;
+    if (n > 1) return `Interpret ${n} outfits`;
+    if (n === 1) return "Interpret outfit";
+    return selected && selected.result ? "Regenerate" : "Interpret outfit";
+  }
+  function updateRunButton() {
+    $("run").textContent = busy ? "Reading…" : runLabel();
+    $("run").disabled = busy || !(queue.some(q => q.status === "waiting" || q.status === "failed") || (selected && selected.result));
+  }
+  function select(item) {
+    if (selected && selected !== item) selected.excluded = excluded;   // exclusions stay with their outfit
+    selected = item; image = item ? item.image : null;
+    variants = []; $("variantsOut").innerHTML = ""; remix = false; lookup = new Map();
+    if (item && item.result) { result = item.result; excluded = item.excluded || new Set(); current = catalog.find(e => e.id === item.entryId) || null; headerFor = undefined; render(); }
+    else { result = null; excluded = new Set(); current = null; showPending(item); }
+    renderQueue();
+  }
+  function showPending(item) {
+    $("out").hidden = true; $("outputControls").hidden = true; $("empty").hidden = false;
+    if (!item) { $("empty").textContent = "Results will show up here as grouped, toggleable tags."; return; }
+    const msg = item.status === "reading" ? "Reading this outfit…" : item.status === "failed" ? "Failed: " + item.error : `Not read yet. Click “${runLabel()}”.`;
+    $("empty").innerHTML = `<img src="${item.image.dataUrl}" alt="" style="max-height:260px;max-width:100%;border-radius:8px;display:block;margin:0 auto 8px"><span>${esc(msg)}</span>`;
+  }
+  function removeItem(item) {
+    if (item.status === "reading") { setStatus("Wait for this outfit to finish reading.", "warn"); return; }
+    queue = queue.filter(q => q !== item);
+    if (selected === item) select(queue.find(q => q.result) || queue[0] || null); else renderQueue();
+  }
+  function clearQueue() {
+    const keep = queue.filter(q => q.status === "reading");
+    queue = keep;
+    if (selected && !keep.includes(selected)) select(keep[0] || null); else renderQueue();
+    setStatus(keep.length ? "Cleared everything except the outfit being read." : "Queue cleared. Saved outfits stay in the catalog.", "ok");
+  }
+  function renderQueue() {
+    const strip = $("queue"), sel = $("queueSel");
+    strip.innerHTML = ""; sel.innerHTML = "";
+    $("queueCount").textContent = queue.length ? `${queue.length} of ${QUEUE_MAX}` : "";
+    $("clearQueue").hidden = !queue.length;
+    sel.hidden = queue.length < 2;
+    const label = { waiting: "waiting", reading: "reading…", done: "done", failed: "failed" };
+    queue.forEach((item, i) => {
+      const t = document.createElement("div");
+      t.className = "qthumb " + item.status + (item === selected ? " active" : "");
+      t.title = `${item.name} · ${label[item.status]}`; t.tabIndex = 0;
+      t.innerHTML = `<img src="${item.image.thumb}" alt=""><span class="qdot"></span>`;
+      t.addEventListener("click", () => select(item));
+      t.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(item); } });
+      const x = btn("×", (e) => { e.stopPropagation(); removeItem(item); }, "qx"); x.title = "Remove from the queue"; x.setAttribute("aria-label", "Remove " + item.name + " from the queue");
+      t.appendChild(x); strip.appendChild(t);
+
+      const b = document.createElement("button"); b.type = "button";
+      b.className = "qtab " + item.status + (item === selected ? " active" : "");
+      b.setAttribute("aria-pressed", item === selected ? "true" : "false");
+      b.innerHTML = `<img src="${item.image.thumb}" alt=""><span class="qtext"><span class="qname">${i + 1}. ${esc(item.name)}</span><span class="qstat">${label[item.status]}</span></span>`;
+      b.addEventListener("click", () => select(item)); sel.appendChild(b);
+    });
+    if (selected && !selected.result) showPending(selected);
+    updateRunButton();
+  }
+
+  // ======================= interpret =======================
+  async function run() {
+    if (busy) return;
+    let todo = queue.filter(q => q.status === "waiting" || q.status === "failed");
+    const regenerate = !todo.length && selected && selected.result;
+    if (regenerate) todo = [selected];
+    if (!todo.length) return;
+    if (!(await P().ready())) { setStatus(P().unavailableMessage || "The model provider is not available.", "bad"); return; }
+    busy = true; updateRunButton();
+    const t0 = performance.now(); let ok = 0, servedBy = "";
+    for (const [i, item] of todo.entries()) {
+      item.status = "reading"; item.error = ""; renderQueue();
+      setStatus(todo.length > 1 ? `Reading ${i + 1} of ${todo.length}… (10–60 s each)` : "Thinking… (usually 10–60 s)");
+      try {
+        const r = await P().interpret({ image: item.image, prompt: interpretPrompt($("focus").value, $("notes").value.trim(), item.context), schema: SCHEMA, fresh: !!regenerate });
+        item.result = normalizeResult(r.json); item.excluded = new Set(); servedBy = r.servedBy;
+        await verifyIdentityOf(item.result);
+        item.excluded = new Set(C.unverifiedIdentity(item.result));
+        item.status = "done"; ok++;
+        item.entryId = addEntry({ name: item.name, thumb: item.image.thumb, source: "photo", model: r.servedBy, result: item.result }).id;
+        // Show the first finished outfit, and keep showing whatever the user picked after that.
+        if (selected === item || !selected || !selected.result) select(item); else { renderQueue(); renderCatalog(); }
+      } catch (e) {
+        console.error(e); item.status = "failed";
+        item.error = P().errorMessage ? P().errorMessage(e) : (e.message || e.code || String(e)); renderQueue();
+      }
+    }
+    busy = false; updateRunButton();
+    const secs = ((performance.now() - t0) / 1000).toFixed(1), failed = todo.filter(q => q.status === "failed");
+    if (todo.length === 1) setStatus(ok ? `Done in ${secs}s via ${servedBy}. Saved to the catalog.` : failed[0].error, ok ? "ok" : "bad");
+    else setStatus(`Read ${ok} of ${todo.length} in ${secs}s and saved them to the catalog.` + (failed.length ? ` ${failed.length} failed; click “${runLabel()}” to retry.` : " Use the photo tabs to switch outfits."), failed.length ? "warn" : "ok");
   }
 
   // ======================= variants =======================
@@ -208,7 +206,8 @@ window.OTI = (() => {
     $("variantsBtn").disabled = true; $("variantsOut").innerHTML = '<p class="tiny">Designing three new outfits… (20–60 s)</p>';
     try {
       const r = await P().text({ prompt: variantsPrompt(result, $("variantDir").value.trim()), schema: VARIANTS_SCHEMA, fresh: true });
-      variants = (r.json.variants || []).slice(0, 3).map(v => ({ title: v.title || "Variant", direction: v.direction || "", result: normalizeResult({ description: v.description, subject: result.subject, outfit: v.outfit, style_tags: v.style_tags, framing_tags: result.framing_tags, negative_prompt: v.negative_prompt }) }));
+      variants = (r.json.variants || []).slice(0, 3).map(v => ({ title: v.title || "Variant", direction: v.direction || "", result: normalizeResult({ description: v.description, subject: result.subject, outfit: v.outfit, style_tags: v.style_tags, framing_tags: result.framing_tags, negative_prompt: v.negative_prompt, caption: v.caption, prose: v.prose }) }));
+      variants.forEach(v => { v.result.character_tags = [...(result.character_tags || [])]; v.result.copyright_tags = [...(result.copyright_tags || [])]; v.result.identity_info = clone(result.identity_info || {}); v.result.identity_check = clone(result.identity_check || {}); });
       renderVariants();
     } catch (e) { console.error(e); $("variantsOut").innerHTML = `<p class="tiny" style="color:var(--bad)">${esc(P().errorMessage ? P().errorMessage(e) : (e.message || e.code || "failed"))}</p>`; }
     finally { $("variantsBtn").disabled = false; }
@@ -245,12 +244,18 @@ window.OTI = (() => {
     result.outfit.forEach(o => { o.tags = fix(o.tags); }); result.style_tags = fix(result.style_tags); result.framing_tags = fix(result.framing_tags); result.negative_prompt = fix(result.negative_prompt);
     return n;
   }
+  // Check character, series and named-outfit guesses on Danbooru, where this view can reach it.
+  async function verifyIdentityOf(res) {
+    if (!P().lookupTags || !((res.character_tags || []).length + (res.copyright_tags || []).length + (res.named_outfit_tags || []).length)) return null;
+    try { return await C.verifyIdentity(res, (names) => P().lookupTags(names)); }
+    catch (e) { console.warn("identity check failed", e); return null; }
+  }
   async function checkTags() {
     if (!result) return;
     const n = applyAliasFixes(); if (n) setStatus(`Fixed ${n} alias spelling${n > 1 ? "s" : ""}.`, "ok");
     if (!P().lookupTags) { render(); setStatus((n ? `Fixed ${n} aliases. ` : "") + "Live Danbooru lookup is not available in this view; showing vocabulary matches only.", "warn"); return; }
     $("checkBtn").disabled = true; setStatus("Checking tags on Danbooru…");
-    try { lookup = await P().lookupTags(allTags()); render(); const unknown = allTags().filter(t => !lookup.get(t)).length; setStatus(`Checked ${lookup.size} tags on Danbooru${unknown ? `, ${unknown} not found` : ""}.`, unknown ? "warn" : "ok"); }
+    try { if (await verifyIdentityOf(result)) C.unverifiedIdentity(result).forEach(t => excluded.add(t)); lookup = await P().lookupTags(allTags()); render(); const unknown = allTags().filter(t => !lookup.get(t)).length; setStatus(`Checked ${lookup.size} tags on Danbooru${unknown ? `, ${unknown} not found` : ""}.`, unknown ? "warn" : "ok"); }
     catch (e) { console.error(e); render(); setStatus("Danbooru lookup failed (blocked or offline). Showing vocabulary matches only.", "warn"); }
     finally { $("checkBtn").disabled = false; }
   }
@@ -265,33 +270,90 @@ window.OTI = (() => {
     return out;
   }
   function fmtTag(t, fmt) { return fmt === "danbooru" ? t : t.replace(/_/g, " "); }
-  function promptTextOf(res, opts = {}) {
-    const fmt = $("fmt").value, min = Number($("minConf").value); const outfitOnly = opts.outfitOnly;
-    return orderedTagsOf(res, false).filter(x => x.conf >= min && (!outfitOnly || !["subject", "hair", "face", "framing"].includes(x.group))).map(x => {
-      const t = fmtTag(x.tag, fmt); if (fmt !== "weighted") return t;
-      const w = x.conf >= 0.95 ? null : (0.8 + x.conf * 0.4).toFixed(2); return w ? `(${t}:${w})` : t;
-    }).join(", ");
+  // ======================= generator presets =======================
+  let presetId = "none", overrides = {};
+  function loadPresets() {
+    presetId = ls(LS.preset) || "none"; if (!C.PRESETS[presetId]) presetId = "none";
+    try { overrides = JSON.parse(ls(LS.overrides) || "{}") || {}; } catch { overrides = {}; }
   }
+  function formatOpts(res, extra = {}) {
+    return Object.assign({ format: $("fmt").value, preset: presetId, overrides, excluded: res === result ? excluded : new Set(), minConf: Number($("minConf").value) }, extra);
+  }
+  const formatted = (res, extra) => C.formatPrompt(res, formatOpts(res, extra));
+  function promptTextOf(res, opts = {}) { return formatted(res, { outfitOnly: !!opts.outfitOnly }).prompt; }
   const promptText = (opts) => promptTextOf(result, opts);
   // One group's tags, in the current format, skipping excluded tags and respecting the confidence cutoff.
   function groupText(list, conf) {
-    const fmt = $("fmt").value, min = Number($("minConf").value);
+    const fmt = $("fmt").value, min = Number($("minConf").value), p = C.presetOf(presetId, overrides);
     if (conf != null && conf < min) return "";
-    return list.filter(t => !excluded.has(t)).map(t => { const f = fmtTag(t, fmt); if (fmt !== "weighted" || conf == null || conf >= 0.95) return f; return `(${f}:${(0.8 + conf * 0.4).toFixed(2)})`; }).join(", ");
+    return list.filter(t => !excluded.has(t)).map(t => { const f = fmtTag(t, fmt); return fmt === "weighted" ? C.emph(f, conf, p.emphasis) : f; }).join(", ");
+  }
+  function fillPresetEditor() {
+    const p = C.presetOf(presetId, overrides);
+    $("presetPrefix").value = p.prefix; $("presetSuffix").value = p.suffix; $("presetNegative").value = p.negative;
+    $("presetNote").textContent = p.note || ""; $("presetReset").hidden = !overrides[presetId];
+    $("presetEdit").hidden = presetId === "none";
+  }
+  function bindPresetUI() {
+    const sel = $("preset");
+    Object.entries(C.PRESETS).forEach(([id, p]) => { const o = document.createElement("option"); o.value = id; o.textContent = p.label; sel.appendChild(o); });
+    sel.value = presetId;
+    sel.addEventListener("change", () => {
+      presetId = sel.value; ls(LS.preset, presetId);
+      $("fmt").value = C.PRESETS[presetId].format; ls(LS.fmt, $("fmt").value);   // each generator starts in the format it reads best
+      fillPresetEditor(); render();
+    });
+    ["presetPrefix", "presetSuffix", "presetNegative"].forEach(id => $(id).addEventListener("input", () => {
+      overrides[presetId] = { prefix: $("presetPrefix").value, suffix: $("presetSuffix").value, negative: $("presetNegative").value };
+      ls(LS.overrides, JSON.stringify(overrides)); $("presetReset").hidden = false; render();
+    }));
+    $("presetReset").addEventListener("click", () => { delete overrides[presetId]; ls(LS.overrides, JSON.stringify(overrides)); fillPresetEditor(); render(); });
+    fillPresetEditor();
+  }
+  // Ask the model to rewrite the caption and prose for the tags as they are now.
+  async function rewriteSentences() {
+    if (!result) return;
+    if (!(await P().ready())) { setStatus(P().unavailableMessage || "The model provider is not available.", "bad"); return; }
+    const b = $("sentenceBtn"); b.disabled = true; b.textContent = "Writing…";
+    try {
+      const r = await P().text({ prompt: C.sentencePrompt(result, excluded), schema: C.SENTENCE_SCHEMA, fresh: true });
+      result.prose = String(r.json.prose || "").trim(); result.caption = String(r.json.caption || "").trim(); result.proseSig = C.tagSig(result, excluded);
+      render(); setStatus("Sentence rewritten for the current tags." + (current ? " Click “Update this outfit” to keep it in the catalog." : ""), "ok");
+    } catch (e) { console.error(e); setStatus(P().errorMessage ? P().errorMessage(e) : ("Failed: " + (e.message || e.code || e)), "bad"); b.disabled = false; }
+  }
+  function renderSentenceNote(f) {
+    const note = $("sentenceNote"), fmt = $("fmt").value;
+    if (fmt !== "prose" && fmt !== "hybrid") { note.hidden = true; return; }
+    const s = f.sentences;
+    const msg = s.composed ? "This sentence was assembled from the outfit list." : s.stale ? "This sentence was written before your edits, so it may mention tags you removed." : "";
+    note.hidden = !msg; $("sentenceMsg").textContent = msg;
+    $("sentenceBtn").textContent = s.composed ? "Write it with Claude" : "Rewrite it"; $("sentenceBtn").disabled = false;
   }
 
   // ======================= render =======================
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   function btn(label, fn, cls = "small") { const b = document.createElement("button"); b.type = "button"; b.className = cls; b.textContent = label; b.addEventListener("click", fn); return b; }
 
+  function identityIssue(tag) {
+    const info = result && result.identity_info && result.identity_info[tag]; if (!info) return null;
+    const chk = (result.identity_check || {})[tag];
+    const bits = [`${info.kind === "character" ? "character" : info.kind === "copyright" ? "series" : "named outfit"}, ${Math.round(info.confidence * 100)}% sure`];
+    if (info.cosplay) bits.push("cosplay");
+    if (info.evidence) bits.push("evidence: " + info.evidence);
+    if (chk) bits.push({ ok: `on Danbooru (${chk.posts} posts)`, fixed: `corrected from ${chk.from} (${chk.posts} posts)`, missing: "not found on Danbooru, may be a guess", category: "exists on Danbooru but as a different kind of tag" }[chk.status]);
+    const kind = !chk ? "ok" : chk.status === "missing" || chk.status === "category" ? "unknown" : chk.posts >= 5000 ? "common" : chk.posts >= 500 ? "uncommon" : "rare";
+    return { kind, count: chk ? chk.posts : null, tip: bits.join(" · "), ident: true };
+  }
   function chip(tag, conf, group, onDelete) {
-    const el = document.createElement("span"); const iss = tagIssues(tag);
-    el.className = "chip" + (T.isCanonical(tag) ? "" : " custom") + (excluded.has(tag) ? " off" : "") + (iss.kind === "alias" || iss.kind === "unknown" ? " warn" : "");
+    const el = document.createElement("span"); const iss = identityIssue(tag) || tagIssues(tag);
+    el.className = "chip" + (iss.ident ? " ident" : T.isCanonical(tag) ? "" : " custom") + (excluded.has(tag) ? " off" : "") + (iss.kind === "alias" || iss.kind === "unknown" ? " warn" : "");
     const a = document.createElement("a"); a.href = "https://danbooru.donmai.us/wiki_pages/" + encodeURIComponent(tag); a.target = "_blank"; a.rel = "noopener"; a.textContent = tag;
-    const tip = { alias: `spelling → ${iss.fix}`, unknown: "not found on Danbooru", rare: `rare on Danbooru (${iss.count} posts)`, uncommon: `${iss.count} posts`, common: `${iss.count} posts`, custom: "custom phrase, may have no wiki page", ok: "Danbooru tag" }[iss.kind];
+    const tip = iss.tip || { alias: `spelling → ${iss.fix}`, unknown: "not found on Danbooru", rare: `rare on Danbooru (${iss.count} posts)`, uncommon: `${iss.count} posts`, common: `${iss.count} posts`, custom: "custom phrase, may have no wiki page", ok: "Danbooru tag" }[iss.kind];
     a.title = tip + (group ? " · " + group : "") + " · open wiki"; el.appendChild(a);
     if (iss.kind === "alias") { const f = document.createElement("button"); f.type = "button"; f.className = "fix"; f.textContent = "→ " + iss.fix; f.title = "Replace with the canonical spelling"; f.addEventListener("click", () => { renameTag(tag, iss.fix); render(); }); el.appendChild(f); }
     if (iss.count != null) { const d = document.createElement("i"); d.className = "dot " + iss.kind; d.title = tip; el.appendChild(d); }
+    if (iss.ident && result.identity_info[tag].cosplay) { const b = document.createElement("span"); b.className = "conf"; b.textContent = "cosplay"; el.appendChild(b); }
+    if (iss.ident && (result.identity_check || {})[tag] && result.identity_check[tag].status === "fixed") { const b = document.createElement("span"); b.className = "conf"; b.textContent = "fixed"; b.title = iss.tip; el.appendChild(b); }
     if (conf != null) { const c = document.createElement("span"); c.className = "conf"; c.textContent = conf.toFixed(2); el.appendChild(c); }
     const x = document.createElement("button"); x.type = "button"; x.className = "x";
     if (remix) { x.textContent = "×"; x.title = "Delete this tag"; x.addEventListener("click", () => { onDelete(); render(); }); }
@@ -303,12 +365,14 @@ window.OTI = (() => {
     const f = (arr) => arr.map(t => t === from ? to : t);
     const s = result.subject; s.count_tag = s.count_tag === from ? to : s.count_tag; s.body_tags = f(s.body_tags); s.hair_tags = f(s.hair_tags); s.face_tags = f(s.face_tags);
     result.outfit.forEach(o => o.tags = f(o.tags)); result.style_tags = f(result.style_tags); result.framing_tags = f(result.framing_tags);
+    ["character_tags", "copyright_tags", "named_outfit_tags"].forEach(k => { if (result[k]) result[k] = f(result[k]); });
+    if (result.identity_info && result.identity_info[from]) { result.identity_info[to] = result.identity_info[from]; delete result.identity_info[from]; }
   }
 
   function render() {
     if (!result) return;
     $("empty").hidden = true; $("out").hidden = false; $("outputControls").hidden = false;
-    $("prompt").textContent = promptText(); $("desc").textContent = result.description;
+    const f = formatted(result); $("prompt").textContent = f.prompt; renderSentenceNote(f); $("desc").textContent = result.description;
     $("remixBar").classList.toggle("on", remix); $("remixBtn").textContent = remix ? "Done remixing" : "Remix";
     const g = $("groups"); g.innerHTML = "";
     const addGroup = (title, meta, list, conf, onDelete, extra) => {
@@ -326,8 +390,13 @@ window.OTI = (() => {
     };
     const s = result.subject;
     addGroup("Subject", "", [s.count_tag, ...s.body_tags].filter(Boolean), null, (i) => { if (i === 0 && s.count_tag) s.count_tag = ""; else s.body_tags.splice(s.count_tag ? i - 1 : i, 1); });
+    ["character_tags", "copyright_tags", "named_outfit_tags"].forEach(k => { if (!result[k]) result[k] = []; });
+    if (!result.identity_info) result.identity_info = {};
+    addGroup("Character", "identified by Claude", result.character_tags, null, (i) => result.character_tags.splice(i, 1));
+    addGroup("Series", "", result.copyright_tags, null, (i) => result.copyright_tags.splice(i, 1));
     addGroup("Hair", "", s.hair_tags, null, (i) => s.hair_tags.splice(i, 1));
     addGroup("Face", "", s.face_tags, null, (i) => s.face_tags.splice(i, 1));
+    addGroup("Named outfit", "", result.named_outfit_tags, null, (i) => result.named_outfit_tags.splice(i, 1));
     result.outfit.forEach((o, oi) => {
       let extra = null;
       if (remix) {
@@ -342,7 +411,7 @@ window.OTI = (() => {
     if (remix) { const addG = document.createElement("div"); addG.className = "group"; const sel = document.createElement("select"); T.categories.forEach(c => { const op = document.createElement("option"); op.value = c; op.textContent = c.replace(/_/g, " "); sel.appendChild(op); }); const r = document.createElement("div"); r.className = "row"; r.append(sel, btn("+ add garment", () => { result.outfit.push({ category: sel.value, item: "new " + sel.value.replace(/_/g, " "), color: "", material: "", pattern: "", tags: [], confidence: 0.9 }); render(); })); addG.appendChild(r); g.appendChild(addG); }
     addGroup("Style", "", result.style_tags, null, (i) => result.style_tags.splice(i, 1));
     addGroup("Framing / setting", "", result.framing_tags, null, (i) => result.framing_tags.splice(i, 1));
-    $("neg").textContent = result.negative_prompt.map(t => fmtTag(t, $("fmt").value)).join(", ");
+    $("neg").textContent = f.negative;
     $("raw").textContent = JSON.stringify(result, null, 2);
     renderCurrentHeader(); renderCatalog();
   }
@@ -354,13 +423,13 @@ window.OTI = (() => {
 
   // ======================= catalog =======================
   function loadCatalog() {
-    let h = []; try { h = JSON.parse(localStorage.getItem(LS.catalog) || "[]"); } catch {}
+    let h = []; try { h = JSON.parse(store().get(LS.catalog) || "[]"); } catch {}
     // migrate older entries
     return h.map((e, i) => Object.assign({ id: e.id || ("e" + (e.ts || Date.now()) + i), name: e.name ? String(e.name).replace(/\.[^.]+$/, "") : "outfit", notes: "", labels: [], fav: false, status: "new", source: "photo", parentId: null }, e));
   }
   function saveCatalog() {
     for (let attempt = 0; attempt < 5; attempt++) {
-      try { localStorage.setItem(LS.catalog, JSON.stringify(catalog)); return true; }
+      try { store().set(LS.catalog, JSON.stringify(catalog)); return true; }
       catch (e) {
         const quota = e && (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014);
         if (!quota) { storageWarning(); return false; }               // storage unavailable: keep everything in memory
@@ -377,7 +446,7 @@ window.OTI = (() => {
     catalog.push(e); while (catalog.length > 150) { const v = catalog.findIndex(x => !x.fav); if (v < 0) break; catalog.splice(v, 1); }
     saveCatalog(); return e;
   }
-  function openEntry(e) { current = e; headerFor = undefined; result = clone(e.result); excluded = new Set(); remix = false; lookup = new Map(); variants = []; $("variantsOut").innerHTML = ""; render(); setStatus(`Opened “${e.name}”.`, "ok"); }
+  function openEntry(e) { if (selected) { selected.excluded = excluded; selected = null; renderQueue(); } current = e; headerFor = undefined; result = clone(e.result); excluded = new Set(C.unverifiedIdentity(result)); remix = false; lookup = new Map(); variants = []; $("variantsOut").innerHTML = ""; render(); setStatus(`Opened “${e.name}”.`, "ok"); }
   let headerFor = undefined; // which entry the header inputs were last filled from
   function renderCurrentHeader() {
     const h = $("currentHeader"); h.hidden = false;
@@ -430,15 +499,19 @@ window.OTI = (() => {
     if (P().download) { try { await P().download(filename, text); setStatus("Saved " + filename, "ok"); } catch (e) { if (e?.code !== "cancelled") setStatus("Could not save the file. Use copy instead.", "warn"); } return; }
     const blob = new Blob([text], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
-  function exportObj() { return { ...result, prompt: promptText(), excluded: [...excluded], format: $("fmt").value, name: current?.name || null, exported_at: new Date().toISOString() }; }
+  function exportObj() { const f = formatted(result); return { ...result, prompt: f.prompt, negative: f.negative, generator: presetId, excluded: [...excluded], format: $("fmt").value, name: current?.name || null, exported_at: new Date().toISOString() }; }
 
   // ======================= init =======================
   function init() {
-    bindImageInput(); bindCatalogUI();
-    $("fmt").value = ls(LS.fmt) || "danbooru"; $("minConf").value = ls(LS.minConf) || "0.5";
+    catalog = loadCatalog();
+    $("importBtn").addEventListener("click", () => $("importCat").click());
+    bindImageInput(); bindCatalogUI(); renderQueue();
+    loadPresets(); $("fmt").value = ls(LS.fmt) || C.PRESETS[presetId].format; if (!$("fmt").value) $("fmt").value = "danbooru"; $("minConf").value = ls(LS.minConf) || "0.5";
+    bindPresetUI(); $("sentenceBtn").addEventListener("click", rewriteSentences);
     $("fmt").addEventListener("change", () => { ls(LS.fmt, $("fmt").value); render(); }); $("minConf").addEventListener("change", () => { ls(LS.minConf, $("minConf").value); render(); });
     $("run").addEventListener("click", run);
     $("copyPrompt").addEventListener("click", () => copy(promptText(), "Prompt copied."));
+    $("copyNeg").addEventListener("click", () => { const n = formatted(result).negative; n ? copy(n, "Negative prompt copied.") : setStatus("This generator has no negative prompt.", "warn"); });
     $("copyOutfit").addEventListener("click", () => copy(promptText({ outfitOnly: true }), "Outfit-only prompt copied."));
     $("copyJson").addEventListener("click", () => copy(JSON.stringify(exportObj(), null, 2), "JSON copied."));
     $("dlJson").addEventListener("click", () => download((current?.name || "outfit").replace(/[^\w.-]+/g, "_") + ".tags.json", JSON.stringify(exportObj(), null, 2)));
@@ -449,5 +522,8 @@ window.OTI = (() => {
     renderCatalog();
     if (catalog.length) { const last = catalog[catalog.length - 1]; openEntry(last); setStatus("Showing your latest outfit. Drop a new photo to interpret another."); }
   }
-  return { init, setStatus, get result() { return result; }, get catalog() { return catalog; } };
+  // Re-read the catalog after another part of the app (e.g. the browser extension) changed storage.
+  function reloadCatalog() { catalog = loadCatalog(); if (current) current = catalog.find(e => e.id === current.id) || null; renderCatalog(); }
+  function openById(id) { const e = catalog.find(x => x.id === id); if (e) openEntry(e); return !!e; }
+  return { init, setStatus, loadFile, loadFiles, run, get queueRoom() { return QUEUE_MAX - queue.length; }, reloadCatalog, openById, get result() { return result; }, get catalog() { return catalog; } };
 })();

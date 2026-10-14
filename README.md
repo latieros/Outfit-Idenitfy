@@ -1,52 +1,68 @@
 # Outfit Tag Interpreter
 
-A small static site: upload a photo, have an AI vision model read the outfit, and get it back as
-Danbooru-style tags grouped per garment, ready to paste into an image generator prompt.
+Read an outfit from a photo or a piece of anime art and turn it into prompts for anime image generators:
+Danbooru-style tags grouped per garment, or natural-language sentences for models that read prose.
+It runs as a web page, as a claude.ai artifact, and as a Chrome/Brave extension that works from any image's right-click menu.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `index.html` | The interpreter page: markup plus the API-key provider (Anthropic or OpenAI-compatible). |
-| `app.js` | Shared UI logic: interpretation, catalog, variants, tag checking, remix. Talks to a provider object. |
+| `app.js` | Page logic: photo queue, results, catalog, variants, tag checking, remix. Talks to a provider object. |
+| `core.js` | Logic shared by every surface, with no DOM access: schemas, prompts, generator presets, prompt formatting, sentences, Danbooru identity checks. |
 | `tags.js` | Danbooru-style tag vocabulary by category, plus an alias table for common misspellings. |
-| `artifact/` | The claude.ai artifact provider (asks Claude through the viewer's account). `python3 build_artifact.py` builds the single-file artifact page. |
+| `artifact/` | The claude.ai artifact provider, which asks Claude through the viewer's account. `python3 build_artifact.py` builds the single-file artifact page. |
+| `extension/` | The browser extension: service worker, on-page panel, options page and the provider for its bundled copy of the page. `python3 build_extension.py` builds `dist/outfit-tag-extension/` and a zip. |
 
-## Run it
+## Run the page
 
-Serve the folder with any static server and open `index.html` (opening the file directly also works in most browsers):
+Serve the folder with any static server and open `index.html`:
 
 ```
 python3 -m http.server 8000
 ```
 
-Then:
-
-1. Drop, browse, or paste an image.
+1. Drop, choose or paste up to 5 images.
 2. Pick a provider. Anthropic (Claude) is the default and uses `claude-opus-5-5` unless you type another model.
    The OpenAI-compatible option works with OpenAI, OpenRouter, Ollama, LM Studio and similar servers that expose `/v1/chat/completions` with vision.
 3. Paste an API key. It is stored in this browser's `localStorage` only and sent only to the chosen provider.
-4. Click **Interpret outfit**.
+4. Click **Interpret**.
 
-## Output
+## Install the extension (Chrome or Brave)
 
-- Tags are grouped: subject, hair, face, one group per garment or accessory, style, framing.
-- Purple chips are tags found in `tags.js`. Orange chips are phrases the model invented. Click a chip to drop it from the prompt.
-- Format switch: `danbooru` (underscores), `spaces`, or `weighted` which turns per-item confidence into `(tag:0.8..1.2)` weights.
-- Min confidence hides items the model was unsure about (hidden or cropped garments).
-- Copy the prompt, copy or download the JSON, and every run is saved to `localStorage["oti.history"]` with a thumbnail.
+```
+python3 build_extension.py
+```
+
+Open `chrome://extensions` or `brave://extensions`, turn on Developer mode, choose **Load unpacked** and pick `dist/outfit-tag-extension`.
+The settings page opens on install: add an Anthropic API key there. Calls are billed to that key's Console account.
+
+Right-click menu:
+
+- **Read outfit tags**: a panel on the page with the prompt, grouped tags, copy buttons and save.
+- **Open in Outfit Tag Interpreter**: the full page with the image loaded and read.
+- **Add to outfit queue**: collect up to 5 images across pages; the toolbar badge counts them and the toolbar button opens them together.
+- **Read all outfits on this page**: reads the largest images on the page and saves each to the catalog.
+
+On Danbooru and Gelbooru-style post pages the panel also compares Claude's tags with the post's real tags.
 
 ## Features
 
-- **Catalog.** Every interpretation is saved with a thumbnail. Name it, add labels and notes, star it, and mark it "to try" or "done". Search across names, labels, notes and tags. Export and import as JSON to back up or move between browsers.
-- **Design 3 variants.** From any outfit, ask the model for three new outfits as tag sets: a restyle, a genre shift and a season/formality flip, or give your own direction. Open one to work on it, or save it straight to the catalog as "to try".
-- **Check tags.** Fixes alias spellings from `tags.js` (thigh_highs → thighhighs) and, in the repo version, looks every tag up on Danbooru to show post counts: green is common, orange under 5,000 posts, red under 500 or not found. Inside the artifact the live lookup is blocked, so only the alias fix and vocabulary match run.
-- **Remix.** Delete tags, add tags per garment, swap a garment for one from another saved outfit, add or remove garments, then update the outfit or save it as a copy.
-- **Copy outfit only** gives just the clothing and accessory tags for pasting onto an existing character prompt.
+- **Queue.** Up to 5 photos at once, read one after another. Photo tabs above the tags switch which outfit you are working on; exclusions stay with each outfit.
+- **Generator presets.** Illustrious XL, NoobAI XL, Pony V6, Animagine XL 4, NovelAI V4.5 and Flux. Each wraps the prompt with that model's quality prefix or suffix, adds its standard negative tags, and writes weights in its syntax. Prefix, suffix and negative are editable per preset.
+- **Formats.** Tags with underscores or spaces, tags weighted by confidence, hybrid (tags plus one sentence on layering and fit), and prose (sentences only). Claude writes the sentence and prose in the same call as the tags; after edits, **Rewrite it** updates them.
+- **Characters, series and named outfits.** Claude names fictional characters, their series and iconic outfits as Danbooru tags, with its confidence and the evidence it used. It never identifies real people, though it can name the character a cosplayer is dressed as. Where Danbooru can be reached (the page and the extension), each guess is checked: name order is fixed (`miku_hatsune` → `hatsune_miku`), near misses are corrected through Danbooru's autocomplete, and tags Danbooru has never heard of are flagged and left out of the prompt until you put them back.
+- **Page context.** The extension sends the page title, the image's alt text and nearby caption with the image, marked as untrusted text, so Claude can use a Pixiv title or a wiki caption to recognize a character.
+- **Catalog.** Every read is saved with a thumbnail. Name it, add labels and notes, star it, and mark it "to try" or "done". Search across everything, and export or import JSON.
+- **Design 3 variants.** Three new outfits from any outfit: a restyle, a genre shift and a season or formality flip, or your own direction.
+- **Check tags.** Fixes alias spellings and, where Danbooru can be reached, shows post counts: green is common, orange under 5,000 posts, red under 500 or not found.
+- **Remix.** Delete and add tags, swap a garment for one from another saved outfit, add or remove garments, then update the outfit or save a copy.
+- **Copy** the full prompt, the negative prompt, the outfit only, or any single group.
 
 ## How the model is called
 
-Claude is called from the browser via the Messages API with the image as base64 (downscaled to 1568px on the longest side),
-a system prompt containing the tag vocabulary, and a JSON schema through `output_config.format` so the reply always parses.
-Server-side refusal fallbacks are enabled. Because the call is made from the browser, the request carries the
-`anthropic-dangerous-direct-browser-access` header. That is fine for a personal tool, but do not publish this page with a key in it.
+Claude is called through the Messages API with the image as base64 (downscaled to 1568px on the longest side),
+a prompt containing the tag vocabulary, and a JSON schema through `output_config.format` so the reply always parses.
+Server-side refusal fallbacks are enabled. Calls made from a browser page carry the `anthropic-dangerous-direct-browser-access` header:
+fine for a personal tool, but do not publish the page with a key in it.
