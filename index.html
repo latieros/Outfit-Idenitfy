@@ -166,6 +166,14 @@
   .catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .card { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--bg); }
   .card.active { outline: 2px solid var(--accent); }
+  .card { position: relative; }
+  .card .cx, .card .cpick { position: absolute; top: 6px; z-index: 1; border-radius: 999px; font-size: 12px; line-height: 1; }
+  .card .cx { right: 6px; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; opacity: .75; }
+  .card .cx:hover, .card .cx:focus-visible { opacity: 1; color: var(--bad); border-color: var(--bad); }
+  .card .cx.sure { opacity: 1; width: auto; padding: 0 8px; color: #fff; background: var(--bad); border-color: var(--bad); }
+  .card .cpick { left: 6px; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .card.picked { outline: 2px solid var(--bad); }
+  .selbar { margin-bottom: 8px; padding: 6px 8px; border: 1px dashed var(--bad); border-radius: 8px; }
   .card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
   .card .noimg { aspect-ratio: 1; display: grid; place-items: center; color: var(--muted); font-size: 12px; background: var(--chip); }
   .card .cbody { padding: 8px 10px; }
@@ -325,8 +333,15 @@
       <div class="row tight" style="margin-bottom:8px">
         <input type="search" id="catSearch" placeholder="search name, labels, notes, source, tags" style="flex:1 1 180px">
         <span id="catViews"><button class="small on" data-view="all">all</button> <button class="small" data-view="fav">★</button> <button class="small" data-view="try">to try</button> <button class="small" data-view="done">done</button></span>
+        <button class="small" id="selectCat" title="Pick several outfits to delete">Select</button>
         <button class="small" id="exportCat">Export</button>
         <label class="small" style="margin:0"><input type="file" id="importCat" accept="application/json" hidden><button class="small" type="button" id="importBtn">Import</button></label>
+      </div>
+      <div class="row tight selbar" id="selBar" hidden>
+        <span class="tiny" id="selCount">0 selected</span>
+        <button class="small" id="selAll" type="button">Select all shown</button>
+        <button class="small" id="selDelete" type="button" style="color:var(--bad)">Delete selected</button>
+        <button class="small" id="selCancel" type="button">Done</button>
       </div>
       <div class="catalog" id="catalog"></div>
       <p class="tiny">Saved in this browser only. Export to keep a backup or move between devices; exports carry the tags and thumbnails, not the full pictures.</p>

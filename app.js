@@ -578,8 +578,12 @@ window.OTI = (() => {
     $("favBtn").addEventListener("click", () => { if (!current) { $("favBtn").textContent = $("favBtn").textContent === "★" ? "☆" : "★"; return; } current.fav = !current.fav; saveCatalog(); $("favBtn").textContent = current.fav ? "★" : "☆"; renderCatalog(); });
     $("statusSel").addEventListener("change", () => { if (current) { current.status = $("statusSel").value; saveCatalog(); renderCatalog(); } });
     $("deleteBtn").addEventListener("click", () => { if (!current) return; $("deleteYes").hidden = false; setTimeout(() => { $("deleteYes").hidden = true; }, 4000); });
-    $("deleteYes").addEventListener("click", () => { if (current) C.previews.delete(current.id); catalog = catalog.filter(e => e !== current); saveCatalog(); current = null; $("deleteYes").hidden = true; render(); setStatus("Deleted from the catalog.", "ok"); });
+    $("deleteYes").addEventListener("click", () => { $("deleteYes").hidden = true; if (current) deleteEntries([current]); });
     $("catSearch").addEventListener("input", () => { filter.q = $("catSearch").value.trim().toLowerCase(); renderCatalog(); });
+    $("selectCat").addEventListener("click", () => setPicking(!picking));
+    $("selCancel").addEventListener("click", () => setPicking(false));
+    $("selAll").addEventListener("click", () => { const shown = catalog.filter(entryMatches); if (shown.every(e => picked.has(e))) picked = new Set(); else shown.forEach(e => picked.add(e)); renderCatalog(); });
+    $("selDelete").addEventListener("click", () => { if (!picked.size) return; const b = $("selDelete"); if (b.dataset.sure) { delete b.dataset.sure; deleteEntries([...picked]); if (!catalog.length) setPicking(false); } else { b.dataset.sure = "1"; b.textContent = `Really delete ${picked.size}?`; setTimeout(() => { delete b.dataset.sure; if (picking) renderCatalog(); }, 4000); } });
     document.querySelectorAll("#catViews button").forEach(b => b.addEventListener("click", () => { filter.view = b.dataset.view; document.querySelectorAll("#catViews button").forEach(x => x.classList.toggle("on", x === b)); renderCatalog(); }));
     $("exportCat").addEventListener("click", () => download("outfit-catalog.json", JSON.stringify(catalog, null, 2)));
     $("importCat").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { const arr = JSON.parse(await f.text()); if (!Array.isArray(arr)) throw 0; const ids = new Set(catalog.map(x => x.id)); let n = 0; arr.forEach(x => { if (x && x.result && !ids.has(x.id)) { catalog.push(x); n++; } }); saveCatalog(); catalog = loadCatalog(); renderCatalog(); setStatus(`Imported ${n} outfit${n === 1 ? "" : "s"}.`, "ok"); } catch { setStatus("That file is not a catalog export.", "bad"); } e.target.value = ""; });
@@ -596,8 +600,19 @@ window.OTI = (() => {
     const hay = [e.name, e.notes, e.sourceName || "", e.sourceUrl || "", ...e.labels, ...orderedTagsOf(e.result, true).map(x => x.tag)].join(" ").toLowerCase();
     return filter.q.split(/\s+/).every(w => hay.includes(w));
   }
+  let picking = false, picked = new Set(), sureCard = null;
+  function deleteEntries(list) {
+    const gone = new Set(list); if (!gone.size) return;
+    gone.forEach(e => C.previews.delete(e.id));
+    catalog = catalog.filter(e => !gone.has(e)); saveCatalog();
+    picked = new Set([...picked].filter(e => !gone.has(e)));
+    if (current && gone.has(current)) { current = null; headerFor = undefined; render(); } else renderCatalog();
+    setStatus(gone.size === 1 ? `Deleted “${list[0].name}” from the catalog.` : `Deleted ${gone.size} outfits from the catalog.`, "ok");
+  }
+  function setPicking(on) { picking = on; picked = new Set(); $("selBar").hidden = !on; $("selectCat").classList.toggle("on", on); renderCatalog(); }
   function renderCatalog() {
     const grid = $("catalog"); grid.innerHTML = "";
+    $("selCount").textContent = `${picked.size} selected`; $("selDelete").disabled = !picked.size; $("selDelete").textContent = "Delete selected";
     const list = catalog.filter(entryMatches).sort((a, b) => b.ts - a.ts);
     $("catMeta").textContent = `${list.length} of ${catalog.length}`; $("catCount").textContent = catalog.length ? `(${catalog.length})` : "";
     if (!list.length) { grid.innerHTML = `<p class="tiny">${catalog.length ? "Nothing matches." : "No outfits yet. Interpret a photo to start the catalog."}</p>`; return; }
@@ -605,7 +620,16 @@ window.OTI = (() => {
       const card = document.createElement("div"); card.className = "card" + (e === current ? " active" : "");
       const tags = orderedTagsOf(e.result, true).filter(x => !["subject", "hair", "face", "framing"].includes(x.group)).slice(0, 6).map(x => x.tag);
       card.innerHTML = `${e.thumb ? `<img src="${e.thumb}" alt="">` : `<div class="noimg">${esc(e.source)}</div>`}<div class="cbody"><div class="cname">${e.fav ? "★ " : ""}${esc(e.name)}</div><div class="tiny">${esc(tags.join(", "))}</div>${e.labels.length ? `<div class="labels">${e.labels.map(l => `<span>${esc(l)}</span>`).join("")}</div>` : ""}${sourceHtml(e) ? `<div class="csrc">${sourceHtml(e)}</div>` : ""}<div class="tiny stat ${e.status}">${{ new: "", try: "to try", done: "done" }[e.status] || ""}</div></div>`;
-      card.addEventListener("click", (ev) => { if (ev.target.closest("a")) return; openEntry(e); }); grid.appendChild(card);
+      if (picking) {
+        const pick = document.createElement("input"); pick.type = "checkbox"; pick.className = "cpick"; pick.checked = picked.has(e); pick.title = "Select this outfit"; pick.setAttribute("aria-label", "Select " + e.name);
+        card.classList.toggle("picked", picked.has(e)); card.prepend(pick);
+        card.addEventListener("click", (ev) => { if (ev.target.closest("a")) return; ev.preventDefault(); picked.has(e) ? picked.delete(e) : picked.add(e); renderCatalog(); });
+      } else {
+        const x = btn(sureCard === e ? "Delete?" : "×", (ev) => { ev.stopPropagation(); if (sureCard === e) { sureCard = null; deleteEntries([e]); } else { sureCard = e; renderCatalog(); setTimeout(() => { if (sureCard === e) { sureCard = null; renderCatalog(); } }, 4000); } }, "cx" + (sureCard === e ? " sure" : ""));
+        x.title = sureCard === e ? "Tap again to delete" : "Delete this outfit"; x.setAttribute("aria-label", (sureCard === e ? "Confirm deleting " : "Delete ") + e.name); card.prepend(x);
+        card.addEventListener("click", (ev) => { if (ev.target.closest("a")) return; openEntry(e); });
+      }
+      grid.appendChild(card);
     });
   }
 
