@@ -16,7 +16,60 @@
   $("model").addEventListener("change", () => ls(LS.model, $("model").value)); $("baseUrl").addEventListener("change", () => ls(LS.baseUrl, $("baseUrl").value));
   $("apiKey").addEventListener("change", () => ls(LS.key, $("apiKey").value)); $("effort").addEventListener("change", () => ls(LS.effort, $("effort").value));
   $("clearKey").addEventListener("click", () => { $("apiKey").value = ""; try { localStorage.removeItem(LS.key); } catch {} OTI.setStatus("API key forgotten.", "ok"); });
-  const settings = () => ({ provider: $("provider").value, apiKey: $("apiKey").value.trim(), model: $("model").value.trim(), baseUrl: $("baseUrl").value.trim(), effort: $("effort").value });
+  // With the Outfit Tag extension installed, its key, model and effort fill in whatever is left blank here.
+  const extSettings = () => (bridge && bridge.cache["oti.settings"]) || {};
+  const settings = () => { const x = $("provider").value === "anthropic" ? extSettings() : {}; return { provider: $("provider").value, apiKey: $("apiKey").value.trim() || x.apiKey || "", model: $("model").value.trim() || ($("apiKey").value.trim() ? "" : x.model || ""), baseUrl: $("baseUrl").value.trim(), effort: $("effort").value }; };
+
+  // ---------- the Outfit Tag extension, when it is installed ----------
+  // Its content script answers on this page; then the catalog, pictures and a few choices live in the
+  // extension's storage, shared with the right-click panel and the extension's own copy of the tool.
+  let bridge = null;
+  const KEYS = ["oti.history", "oti.fmt", "oti.minConf", "oti.preset", "oti.presetOverrides", "oti.settings"];
+  function connectBridge() {
+    if (inClaude || !document.documentElement.dataset.otiBridge) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const send = (m) => window.postMessage(Object.assign({ otiPage: true }, m), location.origin);
+      const waits = new Map(); let n = 0;
+      const onMsg = (ev) => {
+        if (ev.source !== window || !ev.data || !ev.data.otiBridge) return;
+        const m = ev.data;
+        if (m.type === "snapshot" && !bridge) {
+          clearTimeout(timer);
+          const cache = Object.assign({}, m.data);
+          const ask = (op, id, data) => new Promise(res => { const reqId = ++n; waits.set(reqId, res); send({ type: "preview", op, id, data, reqId }); setTimeout(() => { if (waits.delete(reqId)) res(null); }, 10000); });
+          bridge = { cache, version: m.version, send, previews: { put: (id, data) => ask("put", id, data), get: (id) => ask("get", id), delete: (id) => ask("delete", id) } };
+          resolve(bridge);
+        } else if (m.type === "preview") { const res = waits.get(m.reqId); if (res) { waits.delete(m.reqId); res(m.data ?? null); } }
+        else if (m.type === "changed" && bridge) {
+          if (bridge.cache[m.key] === m.value) return;
+          bridge.cache[m.key] = m.value;
+          if (m.key === "oti.history" && window.OTI) OTI.reloadCatalog();
+          if (m.key === "oti.settings") noteBridge();
+        }
+      };
+      window.addEventListener("message", onMsg);
+      const timer = setTimeout(() => resolve(null), 3000);
+      send({ type: "hello" });
+    });
+  }
+  function noteBridge() {
+    const x = extSettings(), own = !!$("apiKey").value.trim();
+    $("bridgeNote").hidden = !bridge;
+    if (bridge) $("bridgeNote").textContent = "The Outfit Tag extension is installed, so this page shares its catalog" + (!own && x.apiKey ? " and uses its API key." : own ? ". The key entered here is used instead of the extension's." : ". Add an API key here or in the extension.");
+  }
+  // Outfits saved on this page before the extension came along move over once; the copy here stays as a backup.
+  async function mergeLocalCatalog() {
+    if (!bridge || ls("oti.mergedIntoExtension")) return;
+    let mine = []; try { mine = JSON.parse(ls("oti.history") || "[]"); } catch {}
+    let shared = []; try { shared = JSON.parse(bridge.cache["oti.history"] || "[]"); } catch {}
+    const have = new Set(shared.map(e => e.id)), add = mine.filter(e => e && e.id && !have.has(e.id));
+    if (add.length) {
+      bridge.cache["oti.history"] = JSON.stringify(shared.concat(add)); bridge.send({ type: "set", key: "oti.history", value: bridge.cache["oti.history"] });
+      for (const e of add) { const pic = await OTI_CORE.previews.get(e.id).catch(() => null); if (pic) await bridge.previews.put(e.id, pic); }
+      OTI.setStatus(`Moved ${add.length} outfit${add.length > 1 ? "s" : ""} saved on this site into the extension's catalog.`, "ok");
+    }
+    ls("oti.mergedIntoExtension", "1");
+  }
 
   async function anthropic({ image, prompt, schema }) {
     const s = settings(), content = [];
@@ -98,7 +151,15 @@
     lookupTags: inClaude ? undefined : danbooru,
     download: inClaude ? async (filename, data) => { if (!downloads) throw { code: "unavailable" }; await downloads.save({ filename, data }); } : undefined
   };
-  OTI.init();
-  // Photos passed in from another tool or from the phone's Share menu.
-  HANDOFF.take().then(files => { const imgs = files.filter(f => (f.type || "").startsWith("image/")); if (imgs.length) OTI.loadFiles(imgs); });
+  connectBridge().then(async (b) => {
+    if (b) {
+      window.OTI_PROVIDER.store = { get: (k) => KEYS.includes(k) ? (b.cache[k] ?? null) : ls(k), set: (k, v) => { if (!KEYS.includes(k)) return ls(k, v); b.cache[k] = v; b.send({ type: "set", key: k, value: v }); } };
+      window.OTI_PROVIDER.previews = b.previews;
+      $("apiKey").addEventListener("input", noteBridge);
+    }
+    OTI.init();
+    if (b) { noteBridge(); await mergeLocalCatalog(); OTI.reloadCatalog(); }
+    // Photos passed in from another tool or from the phone's Share menu.
+    HANDOFF.take().then(files => { const imgs = files.filter(f => (f.type || "").startsWith("image/")); if (imgs.length) OTI.loadFiles(imgs); });
+  });
 })();

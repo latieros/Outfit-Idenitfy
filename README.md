@@ -30,6 +30,10 @@ python3 -m http.server 8000
 3. Paste an API key. It is stored in this browser's `localStorage` only and sent only to the chosen provider.
 4. Click **Interpret**.
 
+## One catalog for the website and the extension
+
+Browser storage is per site, so on its own the Photo Tools page keeps a catalog of its own. With the extension installed, its content script runs on that page (`extension/bridge.js`) and hands it the extension's storage: the website, the right-click panel and the extension's bundled copy of the tool then share one catalog, one set of pictures, and the format and generator choices. If the page has no API key entered, it uses the extension's. Outfits saved on the site before the extension was installed are moved over once (the site keeps its copy as a backup). Inside a Claude artifact there is no extension, so that copy stays separate.
+
 ## Install the extension (Chrome or Brave)
 
 ```

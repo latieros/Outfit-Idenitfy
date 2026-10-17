@@ -20,7 +20,7 @@ if out.exists():
 (out / "tool").mkdir(parents=True)
 (out / "icons").mkdir()
 
-for f in ("manifest.json", "background.js", "claude.js", "content.js", "options.html", "options.js"):
+for f in ("manifest.json", "background.js", "claude.js", "content.js", "bridge.js", "options.html", "options.js"):
     shutil.copy(src / f, out / f)
 for f in ("tags.js", "core.js", "app.js"):
     shutil.copy(root / f, out / "tool" / f)

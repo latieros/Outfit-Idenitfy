@@ -286,6 +286,10 @@ async function readAll(tab) {
 // ---------- messages from the panel ----------
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   const tab = sender.tab;
+  if (msg.type === "oti:preview") {        // the Photo Tools page keeps its pictures here, next to the catalog
+    const pv = OTI_CORE.previews, op = msg.op === "put" ? pv.put(msg.id, msg.data) : msg.op === "delete" ? pv.delete(msg.id) : pv.get(msg.id);
+    op.then(data => respond({ data: data ?? null }), () => respond({ data: null })); return true;
+  }
   if (msg.type === "oti:save") { addEntry(msg.entry).then(e => respond({ id: e.id }), err => respond({ error: errMsg(err) })); return true; }
   if (msg.type === "oti:open") { openTool(msg.id ? "?open=" + encodeURIComponent(msg.id) : ""); }
   if (msg.type === "oti:options") { chrome.runtime.openOptionsPage(); }

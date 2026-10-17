@@ -18,6 +18,7 @@ window.OTI = (() => {
   // Storage goes through the provider when it supplies one (the extension uses chrome.storage), else localStorage.
   const defaultStore = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => localStorage.setItem(k, v) };
   const store = () => (P() && P().store) || defaultStore;
+  const previews = () => (P() && P().previews) || C.previews;
 
   // ======================= state =======================
   let image = null;       // { dataUrl, mediaType, blob, w, h, name, thumb }
@@ -204,7 +205,7 @@ window.OTI = (() => {
         item.excluded = new Set(C.unverifiedIdentity(item.result));
         item.status = "done"; ok++;
         item.entryId = addEntry({ name: item.name, thumb: item.image.thumb, source: "photo", model: r.servedBy, result: item.result, sourceName: item.fileName, sourceUrl: item.sourceUrl || (item.context && item.context.url ? "https://" + item.context.url : "") }).id;
-        C.previews.put(item.entryId, item.image.preview || item.image.dataUrl);
+        previews().put(item.entryId, item.image.preview || item.image.dataUrl);
         // Show the first finished outfit, and keep showing whatever the user picked after that.
         if (selected === item || !selected || !selected.result) select(item); else { renderQueue(); renderCatalog(); }
       } catch (e) {
@@ -467,7 +468,7 @@ window.OTI = (() => {
   let mapHot = null, mapOriginal = null, mapFor = null;
   async function mapPicture() {
     if (selected && selected.result === result && selected.image) return selected.image.preview || selected.image.dataUrl;
-    if (current) return await C.previews.get(current.id);
+    if (current) return await previews().get(current.id);
     return null;
   }
   async function renderMap() {
@@ -574,7 +575,7 @@ window.OTI = (() => {
   function readHeader() { return { name: $("outfitName").value.trim() || "outfit", labels: $("outfitLabels").value.split(",").map(x => x.trim().toLowerCase()).filter(Boolean), notes: $("outfitNotes").value.trim(), status: $("statusSel").value }; }
   function bindCatalogUI() {
     $("saveUpdate").addEventListener("click", () => { if (!current) return; Object.assign(current, readHeader(), { result: clone(result) }); saveCatalog(); renderCatalog(); setStatus(`Updated “${current.name}”.`, "ok"); });
-    $("saveNew").addEventListener("click", () => { if (!result) return; const meta = readHeader(); const e = addEntry(Object.assign(meta, { name: current && meta.name === current.name ? meta.name + " (remix)" : meta.name, thumb: current?.thumb || image?.thumb || "", source: current ? "remix" : "photo", parentId: current?.id || null, fav: current?.fav || false, result: clone(result), sourceName: current?.sourceName || image?.name || "", sourceUrl: current?.sourceUrl || "" })); (async () => { const pic = await mapPicture(); if (pic) C.previews.put(e.id, pic); })(); current = e; headerFor = undefined; render(); setStatus(`Saved “${e.name}”.`, "ok"); });
+    $("saveNew").addEventListener("click", () => { if (!result) return; const meta = readHeader(); const e = addEntry(Object.assign(meta, { name: current && meta.name === current.name ? meta.name + " (remix)" : meta.name, thumb: current?.thumb || image?.thumb || "", source: current ? "remix" : "photo", parentId: current?.id || null, fav: current?.fav || false, result: clone(result), sourceName: current?.sourceName || image?.name || "", sourceUrl: current?.sourceUrl || "" })); (async () => { const pic = await mapPicture(); if (pic) previews().put(e.id, pic); })(); current = e; headerFor = undefined; render(); setStatus(`Saved “${e.name}”.`, "ok"); });
     $("favBtn").addEventListener("click", () => { if (!current) { $("favBtn").textContent = $("favBtn").textContent === "★" ? "☆" : "★"; return; } current.fav = !current.fav; saveCatalog(); $("favBtn").textContent = current.fav ? "★" : "☆"; renderCatalog(); });
     $("statusSel").addEventListener("change", () => { if (current) { current.status = $("statusSel").value; saveCatalog(); renderCatalog(); } });
     $("deleteBtn").addEventListener("click", () => { if (!current) return; $("deleteYes").hidden = false; setTimeout(() => { $("deleteYes").hidden = true; }, 4000); });
@@ -603,7 +604,7 @@ window.OTI = (() => {
   let picking = false, picked = new Set(), sureCard = null;
   function deleteEntries(list) {
     const gone = new Set(list); if (!gone.size) return;
-    gone.forEach(e => C.previews.delete(e.id));
+    gone.forEach(e => previews().delete(e.id));
     catalog = catalog.filter(e => !gone.has(e)); saveCatalog();
     picked = new Set([...picked].filter(e => !gone.has(e)));
     if (current && gone.has(current)) { current = null; headerFor = undefined; render(); } else renderCatalog();

@@ -3,10 +3,43 @@
   "name": "Outfit Tag Interpreter",
   "version": "0.1.0",
   "description": "Right-click any image to break the outfit down into Danbooru-style tags for anime image generation.",
-  "permissions": ["contextMenus", "storage", "unlimitedStorage", "scripting", "activeTab", "clipboardWrite"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Open Outfit Tag Interpreter", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "unlimitedStorage",
+    "scripting",
+    "activeTab",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open Outfit Tag Interpreter",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
+  },
   "options_page": "options.html",
-  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" }
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://lopxfi.github.io/Photo-Tools-Personal/outfit-tags.html*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
 }
