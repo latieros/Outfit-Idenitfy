@@ -8,7 +8,6 @@
   async function showModel() {
     const s = await OTI_CLAUDE.settings();
     $("modelInfo").textContent = s.apiKey ? `Using ${s.model} at ${s.effort} effort. Change it in Settings.` : "No API key yet. Open Settings to add one.";
-    $("focus").value = s.focus;
   }
   const call = async ({ image, prompt, schema }) => OTI_CLAUDE.call({ ...(await OTI_CLAUDE.settings()), image, prompt, schema });
 
@@ -45,7 +44,7 @@
     if (p) {
       await chrome.storage.session.remove("oti.pending");
       const blob = await (await fetch(p.dataUrl)).blob();
-      await OTI.loadFile(new File([blob], (p.name || "outfit") + ".jpg", { type: blob.type }), p.context);
+      await OTI.loadFile(new File([blob], (p.name || "outfit") + ".jpg", { type: blob.type }), p.context, p.pageUrl);
       if (await window.OTI_PROVIDER.ready()) OTI.run();
       else OTI.setStatus("Image loaded. Add your API key in Settings, then click “Interpret outfit”.", "warn");
     }
@@ -59,7 +58,7 @@
     await chrome.storage.session.set({ "oti.queue": list.slice(take.length) });
     for (const item of take) {
       const blob = await (await fetch(item.dataUrl)).blob();
-      await OTI.loadFile(new File([blob], (item.name || "outfit") + ".jpg", { type: blob.type }), item.context);
+      await OTI.loadFile(new File([blob], (item.name || "outfit") + ".jpg", { type: blob.type }), item.context, item.pageUrl);
     }
     history.replaceState(null, "", location.pathname);
     if (take.length && await window.OTI_PROVIDER.ready()) OTI.run();

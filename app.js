@@ -66,7 +66,10 @@ window.OTI = (() => {
         const mediaType = "image/jpeg"; const dataUrl = c.toDataURL(mediaType, 0.9);
         const t = document.createElement("canvas"); t.width = t.height = 128; const side = Math.min(w, h);
         t.getContext("2d").drawImage(c, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 128, 128);
-        c.toBlob((blob) => resolve({ dataUrl, mediaType, blob, base64: dataUrl.split(",")[1], w, h, name: file.name, thumb: t.toDataURL("image/jpeg", 0.7) }), mediaType, 0.9);
+        // a smaller copy is kept with the catalog entry so the map can draw labels on it later
+        const ps = Math.min(1, 768 / Math.max(w, h)); const p = document.createElement("canvas"); p.width = Math.round(w * ps); p.height = Math.round(h * ps);
+        p.getContext("2d").drawImage(c, 0, 0, p.width, p.height);
+        c.toBlob((blob) => resolve({ dataUrl, mediaType, blob, base64: dataUrl.split(",")[1], w, h, name: file.name, thumb: t.toDataURL("image/jpeg", 0.7), preview: p.toDataURL("image/jpeg", 0.82) }), mediaType, 0.9);
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode failed")); };
       img.src = url;
@@ -82,13 +85,13 @@ window.OTI = (() => {
   let selected = null;   // the queue item shown in the results, or null (e.g. a catalog entry is open)
   let busy = false;
 
-  async function loadFile(file, context) {
+  async function loadFile(file, context, sourceUrl) {
     if (!file || !file.type || !file.type.startsWith("image/")) { setStatus("That file is not an image.", "bad"); return false; }
     if (queue.length >= QUEUE_MAX) { setStatus(`The queue holds ${QUEUE_MAX} outfits. Remove one to add another.`, "warn"); return false; }
     setStatus("Loading image…");
     try {
       const img = await prepareImage(file);
-      const item = { id: "q" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), image: img, name: (file.name || "outfit").replace(/\.[^.]+$/, ""), status: "waiting", result: null, entryId: null, excluded: new Set(), error: "", context: context || null };
+      const item = { id: "q" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), image: img, name: (file.name || "outfit").replace(/\.[^.]+$/, ""), status: "waiting", result: null, entryId: null, excluded: new Set(), error: "", context: context || null, fileName: file.name || "", sourceUrl: sourceUrl || "" };
       queue.push(item);
       $("imgInfo").textContent = `${file.name} · ${img.w}×${img.h} · ${Math.round(img.blob.size / 1024)} KB`;
       if (!busy && (!selected || !selected.result)) select(item); else renderQueue();
@@ -102,6 +105,21 @@ window.OTI = (() => {
     const room = QUEUE_MAX - queue.length;
     for (const f of list.slice(0, Math.max(0, room))) await loadFile(f);
     if (list.length > room) setStatus(`Added ${Math.max(0, room)} of ${list.length}: the queue holds ${QUEUE_MAX} outfits.`, "warn");
+  }
+  // What to read: the select plus, for "everything", the ticked parts of the picture.
+  function focusValue() {
+    const f = $("focus").value;
+    if (f !== "scene") return f;
+    return { subject: true, background: $("partBackground").checked, composition: $("partComposition").checked, lighting: $("partLighting").checked, colors: $("partColors").checked, aesthetic: $("partAesthetic").checked };
+  }
+  function bindFocus() {
+    const parts = ["partBackground", "partComposition", "partLighting", "partColors", "partAesthetic"];
+    $("focus").value = ls("oti.focus") || "full";
+    try { const saved = JSON.parse(ls("oti.sceneParts") || "null"); if (saved) parts.forEach(p => { $(p).checked = saved[p] !== false; }); } catch {}
+    const sync = () => { $("sceneParts").hidden = $("focus").value !== "scene"; };
+    $("focus").addEventListener("change", () => { ls("oti.focus", $("focus").value); sync(); });
+    parts.forEach(p => $(p).addEventListener("change", () => ls("oti.sceneParts", JSON.stringify(Object.fromEntries(parts.map(q => [q, $(q).checked]))))));
+    sync();
   }
   function runLabel() {
     const n = queue.filter(q => q.status === "waiting" || q.status === "failed").length;
@@ -123,6 +141,7 @@ window.OTI = (() => {
   }
   function showPending(item) {
     $("out").hidden = true; $("outputControls").hidden = true; $("empty").hidden = false;
+    $("mapWrap").hidden = true; $("mapEmpty").hidden = false; $("ideasWrap").hidden = true; $("ideasEmpty").hidden = false;
     if (!item) { $("empty").textContent = "Results will show up here as grouped, toggleable tags."; return; }
     const msg = item.status === "reading" ? "Reading this outfit…" : item.status === "failed" ? "Failed: " + item.error : `Not read yet. Click “${runLabel()}”.`;
     $("empty").innerHTML = `<img src="${item.image.dataUrl}" alt="" style="max-height:260px;max-width:100%;border-radius:8px;display:block;margin:0 auto 8px"><span>${esc(msg)}</span>`;
@@ -179,12 +198,13 @@ window.OTI = (() => {
       item.status = "reading"; item.error = ""; renderQueue();
       setStatus(todo.length > 1 ? `Reading ${i + 1} of ${todo.length}… (10–60 s each)` : "Thinking… (usually 10–60 s)");
       try {
-        const r = await P().interpret({ image: item.image, prompt: interpretPrompt($("focus").value, $("notes").value.trim(), item.context), schema: SCHEMA, fresh: !!regenerate });
-        item.result = normalizeResult(r.json); item.excluded = new Set(); servedBy = r.servedBy;
+        const r = await P().interpret({ image: item.image, prompt: interpretPrompt(focusValue(), $("notes").value.trim(), item.context), schema: SCHEMA, fresh: !!regenerate });
+        item.result = normalizeResult(r.json, focusValue()); item.excluded = new Set(); servedBy = r.servedBy;
         await verifyIdentityOf(item.result);
         item.excluded = new Set(C.unverifiedIdentity(item.result));
         item.status = "done"; ok++;
-        item.entryId = addEntry({ name: item.name, thumb: item.image.thumb, source: "photo", model: r.servedBy, result: item.result }).id;
+        item.entryId = addEntry({ name: item.name, thumb: item.image.thumb, source: "photo", model: r.servedBy, result: item.result, sourceName: item.fileName, sourceUrl: item.sourceUrl || (item.context && item.context.url ? "https://" + item.context.url : "") }).id;
+        C.previews.put(item.entryId, item.image.preview || item.image.dataUrl);
         // Show the first finished outfit, and keep showing whatever the user picked after that.
         if (selected === item || !selected || !selected.result) select(item); else { renderQueue(); renderCatalog(); }
       } catch (e) {
@@ -413,8 +433,14 @@ window.OTI = (() => {
     });
     if (remix) { const addG = document.createElement("div"); addG.className = "group"; const sel = document.createElement("select"); T.categories.forEach(c => { const op = document.createElement("option"); op.value = c; op.textContent = c.replace(/_/g, " "); sel.appendChild(op); }); const r = document.createElement("div"); r.className = "row"; r.append(sel, btn("+ add garment", () => { result.outfit.push({ category: sel.value, item: "new " + sel.value.replace(/_/g, " "), color: "", material: "", pattern: "", tags: [], confidence: 0.9 }); render(); })); addG.appendChild(r); g.appendChild(addG); }
     addGroup("Style", "", result.style_tags, null, (i) => result.style_tags.splice(i, 1));
-    addGroup("Framing / setting", "", result.framing_tags, null, (i) => result.framing_tags.splice(i, 1));
+    if (!result.scene) result.scene = { background_tags: [], lighting_tags: [], color_tags: [], aesthetic_tags: [] };
+    C.SCENE_GROUPS.forEach(g => {
+      const list = g.key === "framing_tags" ? result.framing_tags : (result.scene[g.key] = result.scene[g.key] || []);
+      addGroup(g.label, "", list, null, (i) => list.splice(i, 1));
+    });
     $("neg").textContent = f.negative;
+    $("ideasWrap").hidden = false; $("ideasEmpty").hidden = true;
+    renderMap();
     $("raw").textContent = JSON.stringify(result, null, 2);
     renderCurrentHeader(); renderCatalog();
   }
@@ -422,6 +448,87 @@ window.OTI = (() => {
     const out = [];
     catalog.forEach(e => { if (e.id === excludeId) return; (e.result.outfit || []).forEach((o, i) => { if (o.category === category) out.push([`${o.item || category} — ${e.name}`, `${e.id}:${i}`]); }); });
     return out;
+  }
+
+  // ======================= tabs =======================
+  let tab = "tags";
+  function showTab(name) {
+    tab = name; ls("oti.tab", name);
+    document.querySelectorAll("#tabs button").forEach(b => { const on = b.dataset.tab === name; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); });
+    document.querySelectorAll(".tab").forEach(t => { t.hidden = t.dataset.tab !== name; });
+    if (name === "map") renderMap();
+  }
+  function bindTabs() {
+    document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+    const saved = ls("oti.tab"); showTab(saved && document.querySelector(`#tabs button[data-tab="${saved}"]`) ? saved : "tags");
+  }
+
+  // ======================= map: the picture with a label on each item =======================
+  let mapHot = null, mapOriginal = null, mapFor = null;
+  async function mapPicture() {
+    if (selected && selected.result === result && selected.image) return selected.image.preview || selected.image.dataUrl;
+    if (current) return await C.previews.get(current.id);
+    return null;
+  }
+  async function renderMap() {
+    if (!result || tab !== "map") return;
+    const key = current ? current.id : selected ? selected.id : null;
+    if (mapFor !== key) { mapOriginal = null; mapHot = null; mapFor = key; $("mapReset").hidden = true; }
+    const pic = await mapPicture();
+    if (!pic) { $("mapWrap").hidden = true; $("mapEmpty").hidden = false; $("mapEmpty").textContent = "The full picture was not kept for this outfit (it was saved before pictures were kept, imported, or designed without a photo), so there is nothing to draw on."; return; }
+    const ann = C.annotations(result);
+    $("mapWrap").hidden = false; $("mapEmpty").hidden = true;
+    const img = $("mapImage");
+    if (img.src !== pic) { img.src = pic; if (!img.complete) await new Promise(r => { img.onload = r; img.onerror = r; }); }
+    layoutMap(ann);
+  }
+  function layoutMap(ann) {
+    const img = $("mapImage"), wrap = $("mapImg"), labels = $("mapLabels"), svg = $("mapSvg"), map = $("map");
+    wrap.querySelectorAll(".mapDot, .mapBox").forEach(n => n.remove()); labels.innerHTML = ""; svg.innerHTML = "";
+    if (!ann.length) { labels.innerHTML = '<p class="tiny">The model gave no positions for this outfit. Regenerate to get them.</p>'; return; }
+    const iw = img.clientWidth, ih = img.clientHeight, showBoxes = $("mapBoxes").checked, narrow = matchMedia("(max-width: 700px)").matches;
+    const mapBox = map.getBoundingClientRect(), imgBox = img.getBoundingClientRect(), labBox = labels.getBoundingClientRect();
+    const pts = ann.map((a, i) => ({ a, i, cx: (a.region.x + a.region.w / 2) * iw, cy: (a.region.y + a.region.h / 2) * ih }));
+    // dots and optional boxes on the picture
+    pts.forEach(p => {
+      if (showBoxes) { const b = document.createElement("div"); b.className = "mapBox" + (p.a.key === "hair" ? " hair" : ""); b.style.left = p.a.region.x * iw + "px"; b.style.top = p.a.region.y * ih + "px"; b.style.width = p.a.region.w * iw + "px"; b.style.height = p.a.region.h * ih + "px"; wrap.appendChild(b); }
+      const d = document.createElement("div"); d.className = "mapDot" + (p.a.key === "hair" ? " hair" : "") + (mapHot === p.a.key ? " hot" : "");
+      d.style.left = p.cx + "px"; d.style.top = p.cy + "px"; d.textContent = narrow ? String(p.i + 1) : ""; d.title = p.a.label + " · drag to move";
+      d.addEventListener("pointerenter", () => hot(p.a.key)); d.addEventListener("pointerleave", () => hot(null));
+      d.addEventListener("pointerdown", (e) => startDrag(e, p.a, d));
+      wrap.appendChild(d);
+    });
+    // labels down the side, in picture order, pushed apart so they never overlap
+    const order = [...pts].sort((x, y) => x.cy - y.cy);
+    const els = order.map(p => { const l = document.createElement("div"); l.className = "mapLabel" + (mapHot === p.a.key ? " hot" : ""); l.innerHTML = `<b><span class="n">${p.i + 1}</span>${esc(p.a.label)}</b><span class="tiny">${esc(p.a.tags.slice(0, 5).join(", "))}${p.a.item && p.a.item.confidence != null ? " · " + p.a.item.confidence.toFixed(2) : ""}</span>`; l.addEventListener("pointerenter", () => hot(p.a.key)); l.addEventListener("pointerleave", () => hot(null)); labels.appendChild(l); return l; });
+    if (narrow) return;
+    const gap = 6; let y = 0; const tops = [];
+    order.forEach((p, k) => { const h = els[k].offsetHeight; const want = Math.max(y, p.cy - h / 2); tops.push(want); y = want + h + gap; });
+    const over = y - gap - Math.max(ih, labels.offsetHeight);                      // keep the column inside the picture's height
+    if (over > 0) for (let k = tops.length - 1, floor = Infinity; k >= 0; k--) { const h = els[k].offsetHeight; tops[k] = Math.min(tops[k], floor - gap - h); floor = tops[k]; }
+    labels.style.minHeight = ih + "px";
+    order.forEach((p, k) => {
+      els[k].style.top = Math.max(0, tops[k]) + "px";
+      const x1 = imgBox.left - mapBox.left + p.cx, y1 = imgBox.top - mapBox.top + p.cy, x2 = labBox.left - mapBox.left, y2 = Math.max(0, tops[k]) + els[k].offsetHeight / 2;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", x1); line.setAttribute("y1", y1); line.setAttribute("x2", x2); line.setAttribute("y2", y2); line.setAttribute("class", (p.a.key === "hair" ? "hair" : "") + (mapHot === p.a.key ? " hot" : "")); line.dataset.key = p.a.key; svg.appendChild(line);
+    });
+  }
+  function hot(key) { if (mapHot === key) return; mapHot = key; layoutMap(C.annotations(result)); }
+  function startDrag(e, a, dot) {
+    e.preventDefault(); dot.setPointerCapture(e.pointerId);
+    if (!mapOriginal) mapOriginal = clone({ hair: result.subject.hair_region, outfit: result.outfit.map(o => o.region) });
+    const img = $("mapImage"), rect = () => img.getBoundingClientRect();
+    const move = (ev) => { const r = rect(); const fx = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), fy = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
+      a.region.x = Math.max(0, Math.min(1 - a.region.w, fx - a.region.w / 2)); a.region.y = Math.max(0, Math.min(1 - a.region.h, fy - a.region.h / 2));
+      dot.style.left = (a.region.x + a.region.w / 2) * r.width + "px"; dot.style.top = (a.region.y + a.region.h / 2) * r.height + "px"; };
+    const up = () => { dot.removeEventListener("pointermove", move); dot.removeEventListener("pointerup", up); $("mapReset").hidden = false; layoutMap(C.annotations(result)); setStatus("Moved “" + a.label + "”. Click “Update this outfit” on the Tags tab to keep the new position.", "ok"); };
+    dot.addEventListener("pointermove", move); dot.addEventListener("pointerup", up);
+  }
+  function bindMap() {
+    $("mapBoxes").addEventListener("change", () => layoutMap(C.annotations(result)));
+    $("mapReset").addEventListener("click", () => { if (!mapOriginal) return; result.subject.hair_region = mapOriginal.hair; result.outfit.forEach((o, i) => { o.region = mapOriginal.outfit[i] || o.region; }); mapOriginal = null; $("mapReset").hidden = true; layoutMap(C.annotations(result)); });
+    let t = null; new ResizeObserver(() => { clearTimeout(t); t = setTimeout(() => { if (tab === "map" && result && !$("mapWrap").hidden) layoutMap(C.annotations(result)); }, 60); }).observe($("map"));
   }
 
   // ======================= catalog =======================
@@ -449,7 +556,7 @@ window.OTI = (() => {
     catalog.push(e); while (catalog.length > 150) { const v = catalog.findIndex(x => !x.fav); if (v < 0) break; catalog.splice(v, 1); }
     saveCatalog(); return e;
   }
-  function openEntry(e) { if (selected) { selected.excluded = excluded; selected = null; renderQueue(); } current = e; headerFor = undefined; result = clone(e.result); excluded = new Set(C.unverifiedIdentity(result)); remix = false; lookup = new Map(); variants = []; $("variantsOut").innerHTML = ""; render(); setStatus(`Opened “${e.name}”.`, "ok"); }
+  function openEntry(e) { if (selected) { selected.excluded = excluded; selected = null; renderQueue(); } current = e; headerFor = undefined; result = clone(e.result); excluded = new Set(C.unverifiedIdentity(result)); remix = false; lookup = new Map(); variants = []; $("variantsOut").innerHTML = ""; if (tab === "catalog" || tab === "settings") showTab("tags"); render(); setStatus(`Opened “${e.name}”.`, "ok"); }
   let headerFor = undefined; // which entry the header inputs were last filled from
   function renderCurrentHeader() {
     const h = $("currentHeader"); h.hidden = false;
@@ -459,7 +566,7 @@ window.OTI = (() => {
       if (headerFor !== key) { $("outfitLabels").value = ""; $("outfitNotes").value = ""; $("favBtn").textContent = "☆"; $("statusSel").value = "new"; }
       headerFor = key; return;
     }
-    $("currentState").textContent = `In catalog · ${new Date(current.ts).toLocaleDateString()}${current.source !== "photo" ? " · " + current.source : ""}`;
+    $("currentState").innerHTML = `In catalog · ${new Date(current.ts).toLocaleDateString()}${current.source !== "photo" ? " · " + esc(current.source) : ""}${sourceHtml(current, " · ")}`;
     $("saveNew").textContent = "Save as copy"; $("saveUpdate").hidden = false; $("favBtn").textContent = current.fav ? "★" : "☆";
     if (headerFor !== key) { $("outfitName").value = current.name; $("outfitLabels").value = current.labels.join(", "); $("outfitNotes").value = current.notes; $("statusSel").value = current.status; }
     headerFor = key;
@@ -467,32 +574,38 @@ window.OTI = (() => {
   function readHeader() { return { name: $("outfitName").value.trim() || "outfit", labels: $("outfitLabels").value.split(",").map(x => x.trim().toLowerCase()).filter(Boolean), notes: $("outfitNotes").value.trim(), status: $("statusSel").value }; }
   function bindCatalogUI() {
     $("saveUpdate").addEventListener("click", () => { if (!current) return; Object.assign(current, readHeader(), { result: clone(result) }); saveCatalog(); renderCatalog(); setStatus(`Updated “${current.name}”.`, "ok"); });
-    $("saveNew").addEventListener("click", () => { if (!result) return; const meta = readHeader(); const e = addEntry(Object.assign(meta, { name: current && meta.name === current.name ? meta.name + " (remix)" : meta.name, thumb: current?.thumb || image?.thumb || "", source: current ? "remix" : "photo", parentId: current?.id || null, fav: current?.fav || false, result: clone(result) })); current = e; headerFor = undefined; render(); setStatus(`Saved “${e.name}”.`, "ok"); });
+    $("saveNew").addEventListener("click", () => { if (!result) return; const meta = readHeader(); const e = addEntry(Object.assign(meta, { name: current && meta.name === current.name ? meta.name + " (remix)" : meta.name, thumb: current?.thumb || image?.thumb || "", source: current ? "remix" : "photo", parentId: current?.id || null, fav: current?.fav || false, result: clone(result), sourceName: current?.sourceName || image?.name || "", sourceUrl: current?.sourceUrl || "" })); (async () => { const pic = await mapPicture(); if (pic) C.previews.put(e.id, pic); })(); current = e; headerFor = undefined; render(); setStatus(`Saved “${e.name}”.`, "ok"); });
     $("favBtn").addEventListener("click", () => { if (!current) { $("favBtn").textContent = $("favBtn").textContent === "★" ? "☆" : "★"; return; } current.fav = !current.fav; saveCatalog(); $("favBtn").textContent = current.fav ? "★" : "☆"; renderCatalog(); });
     $("statusSel").addEventListener("change", () => { if (current) { current.status = $("statusSel").value; saveCatalog(); renderCatalog(); } });
     $("deleteBtn").addEventListener("click", () => { if (!current) return; $("deleteYes").hidden = false; setTimeout(() => { $("deleteYes").hidden = true; }, 4000); });
-    $("deleteYes").addEventListener("click", () => { catalog = catalog.filter(e => e !== current); saveCatalog(); current = null; $("deleteYes").hidden = true; render(); setStatus("Deleted from the catalog.", "ok"); });
+    $("deleteYes").addEventListener("click", () => { if (current) C.previews.delete(current.id); catalog = catalog.filter(e => e !== current); saveCatalog(); current = null; $("deleteYes").hidden = true; render(); setStatus("Deleted from the catalog.", "ok"); });
     $("catSearch").addEventListener("input", () => { filter.q = $("catSearch").value.trim().toLowerCase(); renderCatalog(); });
     document.querySelectorAll("#catViews button").forEach(b => b.addEventListener("click", () => { filter.view = b.dataset.view; document.querySelectorAll("#catViews button").forEach(x => x.classList.toggle("on", x === b)); renderCatalog(); }));
     $("exportCat").addEventListener("click", () => download("outfit-catalog.json", JSON.stringify(catalog, null, 2)));
     $("importCat").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { const arr = JSON.parse(await f.text()); if (!Array.isArray(arr)) throw 0; const ids = new Set(catalog.map(x => x.id)); let n = 0; arr.forEach(x => { if (x && x.result && !ids.has(x.id)) { catalog.push(x); n++; } }); saveCatalog(); catalog = loadCatalog(); renderCatalog(); setStatus(`Imported ${n} outfit${n === 1 ? "" : "s"}.`, "ok"); } catch { setStatus("That file is not a catalog export.", "bad"); } e.target.value = ""; });
   }
+  // Where an entry's picture came from: a link to the page, else the file name.
+  function sourceHtml(e, sep = "") {
+    if (e.sourceUrl) { let host = e.sourceUrl; try { host = new URL(e.sourceUrl).hostname.replace(/^www\./, ""); } catch {} return `${sep}from <a href="${esc(e.sourceUrl)}" target="_blank" rel="noopener" title="${esc(e.sourceUrl)}">${esc(host)}</a>`; }
+    if (e.sourceName) return `${sep}from ${esc(e.sourceName)}`;
+    return "";
+  }
   function entryMatches(e) {
     if (filter.view === "fav" && !e.fav) return false; if (filter.view === "try" && e.status !== "try") return false; if (filter.view === "done" && e.status !== "done") return false;
     if (!filter.q) return true;
-    const hay = [e.name, e.notes, ...e.labels, ...orderedTagsOf(e.result, true).map(x => x.tag)].join(" ").toLowerCase();
+    const hay = [e.name, e.notes, e.sourceName || "", e.sourceUrl || "", ...e.labels, ...orderedTagsOf(e.result, true).map(x => x.tag)].join(" ").toLowerCase();
     return filter.q.split(/\s+/).every(w => hay.includes(w));
   }
   function renderCatalog() {
     const grid = $("catalog"); grid.innerHTML = "";
     const list = catalog.filter(entryMatches).sort((a, b) => b.ts - a.ts);
-    $("catMeta").textContent = `${list.length} of ${catalog.length}`;
+    $("catMeta").textContent = `${list.length} of ${catalog.length}`; $("catCount").textContent = catalog.length ? `(${catalog.length})` : "";
     if (!list.length) { grid.innerHTML = `<p class="tiny">${catalog.length ? "Nothing matches." : "No outfits yet. Interpret a photo to start the catalog."}</p>`; return; }
     list.forEach(e => {
       const card = document.createElement("div"); card.className = "card" + (e === current ? " active" : "");
       const tags = orderedTagsOf(e.result, true).filter(x => !["subject", "hair", "face", "framing"].includes(x.group)).slice(0, 6).map(x => x.tag);
-      card.innerHTML = `${e.thumb ? `<img src="${e.thumb}" alt="">` : `<div class="noimg">${esc(e.source)}</div>`}<div class="cbody"><div class="cname">${e.fav ? "★ " : ""}${esc(e.name)}</div><div class="tiny">${esc(tags.join(", "))}</div>${e.labels.length ? `<div class="labels">${e.labels.map(l => `<span>${esc(l)}</span>`).join("")}</div>` : ""}<div class="tiny stat ${e.status}">${{ new: "", try: "to try", done: "done" }[e.status] || ""}</div></div>`;
-      card.addEventListener("click", () => openEntry(e)); grid.appendChild(card);
+      card.innerHTML = `${e.thumb ? `<img src="${e.thumb}" alt="">` : `<div class="noimg">${esc(e.source)}</div>`}<div class="cbody"><div class="cname">${e.fav ? "★ " : ""}${esc(e.name)}</div><div class="tiny">${esc(tags.join(", "))}</div>${e.labels.length ? `<div class="labels">${e.labels.map(l => `<span>${esc(l)}</span>`).join("")}</div>` : ""}${sourceHtml(e) ? `<div class="csrc">${sourceHtml(e)}</div>` : ""}<div class="tiny stat ${e.status}">${{ new: "", try: "to try", done: "done" }[e.status] || ""}</div></div>`;
+      card.addEventListener("click", (ev) => { if (ev.target.closest("a")) return; openEntry(e); }); grid.appendChild(card);
     });
   }
 
@@ -508,7 +621,7 @@ window.OTI = (() => {
   function init() {
     catalog = loadCatalog();
     $("importBtn").addEventListener("click", () => $("importCat").click());
-    bindImageInput(); bindCatalogUI(); renderQueue();
+    bindImageInput(); bindCatalogUI(); bindFocus(); bindMap(); renderQueue();
     loadPresets(); $("fmt").value = ls(LS.fmt) || C.PRESETS[presetId].format; if (!$("fmt").value) $("fmt").value = "danbooru"; $("minConf").value = ls(LS.minConf) || "0.5";
     bindPresetUI(); $("sentenceBtn").addEventListener("click", rewriteSentences);
     $("fmt").addEventListener("change", () => { ls(LS.fmt, $("fmt").value); render(); }); $("minConf").addEventListener("change", () => { ls(LS.minConf, $("minConf").value); render(); });
@@ -522,11 +635,11 @@ window.OTI = (() => {
     $("checkBtn").addEventListener("click", checkTags);
     $("remixBtn").addEventListener("click", () => { remix = !remix; render(); if (remix) setStatus("Remix mode: × deletes tags, add tags per group, swap garments from the catalog, then save.", "ok"); });
     if (P().download === undefined && P().hideDownload) $("dlJson").hidden = true;
-    renderCatalog();
+    renderCatalog(); bindTabs();
     if (catalog.length) { const last = catalog[catalog.length - 1]; openEntry(last); setStatus("Showing your latest outfit. Drop a new photo to interpret another."); }
   }
   // Re-read the catalog after another part of the app (e.g. the browser extension) changed storage.
   function reloadCatalog() { catalog = loadCatalog(); if (current) current = catalog.find(e => e.id === current.id) || null; renderCatalog(); }
   function openById(id) { const e = catalog.find(x => x.id === id); if (e) openEntry(e); return !!e; }
-  return { init, setStatus, loadFile, loadFiles, run, get queueRoom() { return QUEUE_MAX - queue.length; }, reloadCatalog, openById, get result() { return result; }, get catalog() { return catalog; } };
+  return { init, setStatus, loadFile, loadFiles, run, showTab, get queueRoom() { return QUEUE_MAX - queue.length; }, reloadCatalog, openById, get result() { return result; }, get catalog() { return catalog; } };
 })();

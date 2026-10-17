@@ -81,7 +81,7 @@
   }
   async function save() {
     if (savedId) return savedId;
-    const r = await send({ type: "oti:save", entry: { name: state.name || "outfit", thumb: state.thumb || "", result: state.result, model: state.servedBy || "", labels: state.pageUrl ? [new URL(state.pageUrl).hostname.replace(/^www\./, "")] : [], notes: state.pageUrl || "" } });
+    const r = await send({ type: "oti:save", entry: { name: state.name || "outfit", thumb: state.thumb || "", preview: state.preview || "", result: state.result, model: state.servedBy || "", labels: state.pageUrl ? [new URL(state.pageUrl).hostname.replace(/^www\./, "")] : [], sourceUrl: state.pageUrl || "", sourceName: state.name || "" } });
     if (r && r.id) { savedId = r.id; render(); flash("Saved to the catalog."); return savedId; }
     flash("Could not save: " + ((r && r.error) || "no answer from the extension"), "bad"); return null;
   }
@@ -148,7 +148,8 @@
     body.append(...[group("Subject", "", [sub.count_tag, ...sub.body_tags].filter(Boolean)), identityGroup(res, "Character", res.character_tags), identityGroup(res, "Series", res.copyright_tags),
       group("Hair", "", sub.hair_tags), group("Face", "", sub.face_tags), identityGroup(res, "Named outfit", res.named_outfit_tags),
       ...res.outfit.map(o => group(o.item || o.category, [o.category, o.color, o.material].filter(Boolean).join(" · "), o.tags, o.confidence)),
-      group("Style", "", res.style_tags), group("Framing", "", res.framing_tags)].filter(Boolean));
+      group("Style", "", res.style_tags),
+      ...C.SCENE_GROUPS.map(g => group(g.label, "", g.key === "framing_tags" ? res.framing_tags : ((res.scene || {})[g.key] || [])))].filter(Boolean));
     if (f.negative) body.append(el("div", { class: "group" }, el("h4", {}, "Negative", el("button", { class: "cp", onclick: () => copy(f.negative, "the negative prompt") }, "copy")), el("div", { class: "muted" }, f.negative)));
     if (s.siteTags && s.siteTags.tags.length) {
       const predicted = new Set(C.orderedTags(res).map(x => x.tag));

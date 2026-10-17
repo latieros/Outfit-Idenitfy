@@ -113,7 +113,9 @@ async function prepare(blob) {
   const t = new OffscreenCanvas(128, 128); const side = Math.min(w, h);
   t.getContext("2d").drawImage(c, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 128, 128);
   const base64 = await toBase64(jpg);
-  return { mediaType: "image/jpeg", base64, dataUrl: "data:image/jpeg;base64," + base64, thumb: "data:image/jpeg;base64," + await toBase64(await t.convertToBlob({ type: "image/jpeg", quality: 0.7 })), w, h };
+  const ps = Math.min(1, 768 / Math.max(w, h)); const p = new OffscreenCanvas(Math.round(w * ps), Math.round(h * ps)); p.getContext("2d").drawImage(c, 0, 0, p.width, p.height);
+  const preview = "data:image/jpeg;base64," + await toBase64(await p.convertToBlob({ type: "image/jpeg", quality: 0.82 }));
+  return { mediaType: "image/jpeg", base64, dataUrl: "data:image/jpeg;base64," + base64, thumb: "data:image/jpeg;base64," + await toBase64(await t.convertToBlob({ type: "image/jpeg", quality: 0.7 })), preview, w, h };
 }
 
 // ---------- panel ----------
@@ -165,9 +167,11 @@ function addEntry(partial) {
   catalogChain = catalogChain.then(async () => {
     const got = await chrome.storage.local.get(CATALOG_KEY);
     let list = []; try { list = JSON.parse(got[CATALOG_KEY] || "[]"); } catch {}
-    const e = Object.assign({ id: "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), name: "outfit", notes: "", labels: [], fav: false, status: "new", source: "extension", parentId: null, thumb: "", model: "", result: null }, partial);
+    const { preview, ...rest } = partial;
+    const e = Object.assign({ id: "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), name: "outfit", notes: "", labels: [], fav: false, status: "new", source: "extension", parentId: null, thumb: "", model: "", sourceUrl: "", sourceName: "", result: null }, rest);
     list.push(e);
     await chrome.storage.local.set({ [CATALOG_KEY]: JSON.stringify(list) });
+    if (preview) await OTI_CORE.previews.put(e.id, preview);   // the picture itself, for the tool's map view
     return e;
   });
   return catalogChain;
@@ -177,13 +181,13 @@ function addEntry(partial) {
 async function readHere(info, tab) {
   const tabId = tab.id;
   try { await ensurePanel(tabId); } catch { return sendToTool(info, tab); } // e.g. chrome:// pages or the web store
-  const base = { mode: "single", srcUrl: info.srcUrl, frameId: info.frameId || 0, pageUrl: tab.url, name: guessName(info.srcUrl, "", tab.title) };
+  const base = { mode: "single", srcUrl: info.srcUrl, frameId: info.frameId || 0, pageUrl: tab.url, name: guessName(info.srcUrl, "", tab.title), preview: "" };
   show(tabId, { ...base, status: "Reading the image…" });
   const s = await OTI_CLAUDE.settings();
   let img;
   try { img = await prepare(await getImageBlob(info.srcUrl, tab, info.frameId || 0)); }
   catch (e) { return show(tabId, { ...base, error: "Could not read this image: " + errMsg(e) }); }
-  base.thumb = img.thumb;
+  base.thumb = img.thumb; base.preview = img.preview;
   if (!s.apiKey) return show(tabId, { ...base, needsKey: true, error: "Add your Anthropic API key in the extension settings, then try again." });
   show(tabId, { ...base, status: "Asking Claude… (usually 10–60 s)" });
   const [siteTags, context] = await Promise.all([getSiteTags(tabId), getPageContext(tabId, info.srcUrl, info.frameId || 0)]);
@@ -191,7 +195,7 @@ async function readHere(info, tab) {
     const result = await keepAlive((async () => {
       const r = await OTI_CLAUDE.call({ ...s, image: img, prompt: OTI_CORE.interpretPrompt(s.focus, "", context), schema: OTI_CORE.SCHEMA });
       base.servedBy = r.servedBy;
-      return checkIdentity(OTI_CORE.normalizeResult(r.json));
+      return checkIdentity(OTI_CORE.normalizeResult(r.json, s.focus));
     })());
     show(tabId, { ...base, result, siteTags });
   } catch (e) { show(tabId, { ...base, error: errMsg(e) }); }
@@ -268,8 +272,8 @@ async function readAll(tab) {
         const img = await prepare(await getImageBlob(item.src, tab, 0, false));
         item.thumb = img.thumb; show(tabId, state);
         const r = await OTI_CLAUDE.call({ ...s, image: img, prompt: OTI_CORE.interpretPrompt(s.focus, "", { ...pageContext, image_alt: item.alt || "" }), schema: OTI_CORE.SCHEMA });
-        const result = await checkIdentity(OTI_CORE.normalizeResult(r.json));
-        const e = await addEntry({ name: item.name, thumb: img.thumb, result, model: r.servedBy, labels: host ? [host, "batch"] : ["batch"], notes: tab.url });
+        const result = await checkIdentity(OTI_CORE.normalizeResult(r.json, s.focus));
+        const e = await addEntry({ name: item.name, thumb: img.thumb, preview: img.preview, result, model: r.servedBy, labels: host ? [host, "batch"] : ["batch"], sourceUrl: tab.url, sourceName: guessName(item.src, "", "") });
         item.status = "saved"; item.id = e.id;
         item.summary = OTI_CORE.orderedTags(result).filter(x => !["subject", "hair", "face", "framing"].includes(x.group)).slice(0, 8).map(x => x.tag).join(", ");
       } catch (err) { item.status = "failed"; item.error = errMsg(err); }

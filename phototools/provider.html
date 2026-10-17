@@ -32,19 +32,7 @@
         <div><label for="effort">Effort</label><select id="effort"><option value="low">Low (fastest)</option><option value="medium" selected>Medium</option><option value="high">High (most careful)</option></select></div>
       </div>
     </div>
-    <div class="row">
-      <div><label for="focus">Focus</label><select id="focus"><option value="full">Full: outfit, hair, body and framing</option><option value="outfit">Outfit only</option></select></div>
-    </div>
-    <div>
-      <label for="notes">Extra instructions (optional)</label>
-      <textarea id="notes" placeholder="e.g. 'treat as anime style', 'ignore the background', 'this is from Genshin Impact'"></textarea>
-    </div>
-    <div class="row tight">
-      <button class="primary" id="run" disabled>Interpret outfit</button>
-      <button id="stop" class="small" hidden>Stop</button>
-      <button id="clearKey" class="small" title="Forget the saved API key">Forget key</button>
-    </div>
-    <div class="status" id="status">Waiting for a photo.</div>
+    <div class="row tight"><button id="clearKey" class="small" title="Forget the saved API key">Forget key</button></div>
     <details>
       <summary>Where your photo goes</summary>
       <p class="tiny">Unlike the other tools, this one sends the photo you pick to an AI model so it can read the outfit. On this site that's the provider you choose above, using your API key, which stays in this browser and goes only to that provider. Inside Claude it uses your Claude account instead. “Check tags” and character checks look the tags up on Danbooru. Calls with your own key are billed to that key's account.</p>

@@ -8,6 +8,8 @@ window.OUTFIT_TAGS = {
     "underwear_swimwear", "uniforms_costumes", "hair", "eyes", "body",
     "patterns", "materials", "colors", "style", "pose_framing"
   ],
+  // Scene groups (Danbooru tag groups beyond attire): read when the user asks for the whole picture.
+  sceneCategories: ["background", "composition", "lighting", "color_theme", "visual_aesthetic"],
 
   vocab: {
     tops: [
@@ -183,6 +185,65 @@ window.OUTFIT_TAGS = {
       "contrapposto", "outdoors", "indoors", "simple_background", "white_background",
       "street", "city", "night", "day", "photo_background", "realistic", "photorealistic",
       "anime_style", "illustration"
+    ],
+    background: [
+      "simple_background", "white_background", "black_background", "grey_background", "gradient_background",
+      "transparent_background", "blurry_background", "photo_background", "outdoors", "indoors", "street", "city",
+      "cityscape", "rooftop", "alley", "classroom", "hallway", "bedroom", "living_room", "kitchen", "bathroom",
+      "library", "cafe", "restaurant", "shop", "train_station", "train_interior", "bus_interior", "car_interior",
+      "office", "hospital", "shrine", "temple", "church", "castle", "ruins", "beach", "ocean", "lake", "river",
+      "waterfall", "pool", "poolside", "forest", "bamboo_forest", "garden", "field", "flower_field", "wheat_field",
+      "meadow", "mountain", "cliff", "desert", "snow", "sky", "cloudy_sky", "night_sky", "starry_sky", "sunset",
+      "sunrise", "rain", "fog", "underwater", "space", "stage", "concert", "festival", "amusement_park",
+      "park", "playground", "school", "gym", "locker_room", "onsen", "bath", "window", "curtains", "bed",
+      "couch", "chair", "desk", "table", "shelf", "bookshelf", "wall", "brick_wall", "fence", "road",
+      "crosswalk", "bridge", "stairs", "lamppost", "neon_lights", "sign", "graffiti", "tree", "cherry_blossoms",
+      "autumn_leaves", "petals", "falling_petals", "flowers", "grass", "plant", "potted_plant", "balloon",
+      "confetti", "sparkles", "bubbles", "light_particles", "lens_flare", "christmas_tree", "umbrella_(background)"
+    ],
+    composition: [
+      "full_body", "upper_body", "cowboy_shot", "portrait", "close-up", "face", "wide_shot", "very_wide_shot",
+      "feet_out_of_frame", "head_out_of_frame", "out_of_frame", "cropped_legs", "cropped_torso",
+      "from_above", "from_below", "from_side", "from_behind", "straight-on", "dutch_angle", "dynamic_angle",
+      "fisheye", "foreshortening", "perspective", "vanishing_point", "pov", "first-person_view",
+      "depth_of_field", "bokeh", "motion_blur", "motion_lines", "speed_lines", "letterboxed", "pillarboxed",
+      "border", "rounded_corners", "symmetry", "asymmetrical", "rule_of_thirds", "centered", "off-center",
+      "negative_space", "silhouette", "reflection", "mirror", "through_window", "split_screen", "multiple_views",
+      "zoom_layer", "close-up_inset", "panel_layout", "comic", "4koma", "diptych", "triptych", "looking_at_viewer",
+      "looking_away", "looking_back", "looking_to_the_side", "looking_down", "looking_up", "eye_contact",
+      "standing", "sitting", "walking", "running", "kneeling", "lying", "leaning", "leaning_forward",
+      "dynamic_pose", "contrapposto", "action_pose", "jumping", "floating", "flying"
+    ],
+    lighting: [
+      "backlighting", "rim_lighting", "sidelighting", "front_lighting", "top_lighting", "underlighting",
+      "soft_lighting", "hard_lighting", "dramatic_lighting", "cinematic_lighting", "natural_lighting",
+      "sunlight", "dappled_sunlight", "moonlight", "lamplight", "candlelight", "neon_lighting", "stage_lights",
+      "spotlight", "glowing", "glow", "light_rays", "sunbeam", "god_rays", "caustics", "lens_flare", "bloom",
+      "shadow", "shaded_face", "cast_shadow", "volumetric_lighting", "chiaroscuro", "high_contrast",
+      "low_contrast", "overexposure", "underexposure", "bright", "dim", "dark", "night", "day", "evening",
+      "golden_hour", "blue_hour", "twilight", "dusk", "dawn", "overcast", "silhouette", "reflective_light"
+    ],
+    color_theme: [
+      "monochrome", "greyscale", "sepia", "limited_palette", "partially_colored", "spot_color", "duotone",
+      "two-tone", "pastel_colors", "muted_colors", "vivid_colors", "saturated", "desaturated", "high_contrast",
+      "low_contrast", "warm_colors", "cool_colors", "warm_tones", "cool_tones", "neon_palette", "earth_tones",
+      "pink_theme", "red_theme", "orange_theme", "yellow_theme", "green_theme", "blue_theme", "purple_theme",
+      "black_theme", "white_theme", "brown_theme", "aqua_theme", "gradient", "rainbow", "iridescent",
+      "color_contrast", "complementary_colors", "analogous_colors", "triadic_colors", "dark_palette",
+      "light_palette", "film_grain", "chromatic_aberration", "color_halftone", "glitch", "halftone"
+    ],
+    visual_aesthetic: [
+      "anime_screencap", "anime_coloring", "flat_color", "cel_shading", "soft_shading", "painterly",
+      "impressionism", "watercolor_(medium)", "oil_painting_(medium)", "acrylic_paint_(medium)", "marker_(medium)",
+      "colored_pencil_(medium)", "graphite_(medium)", "ink_(medium)", "sketch", "lineart", "no_lineart",
+      "thick_lineart", "thin_lineart", "monochrome_lineart", "pixel_art", "1990s_(style)", "1980s_(style)",
+      "2000s_(style)", "retro_artstyle", "ligne_claire", "art_nouveau", "art_deco", "ukiyo-e", "sumi-e",
+      "nihonga", "pop_art", "vaporwave", "synthwave", "cyberpunk", "dieselpunk", "steampunk", "lofi",
+      "dreamy", "ethereal", "surreal", "abstract", "minimalism", "maximalism", "collage", "mixed_media",
+      "photorealistic", "realistic", "semi-realistic", "3d", "chibi", "cute", "kawaii", "dark", "gloomy",
+      "horror", "eerie", "whimsical", "nostalgic", "melancholy", "serene", "cozy", "fashion_illustration",
+      "magazine_cover", "poster_(medium)", "album_cover", "postcard", "polaroid", "film_photography",
+      "cinematic", "screenshot", "traditional_media", "digital_media", "shikishi"
     ]
   },
 
