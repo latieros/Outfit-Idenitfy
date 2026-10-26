@@ -269,7 +269,7 @@ self.OTI_CORE = (() => {
   const VIDEO_SCHEMA = {
     type: "object", additionalProperties: false, required: ["takes", "tips"],
     properties: {
-      takes: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["title", "prompt", "camera", "why"],
+      takes: { type: "array", items: { type: "object", additionalProperties: false, required: ["title", "prompt", "camera", "why"],
         properties: { title: { type: "string" }, prompt: { type: "string" }, camera: { type: "array", items: { type: "string" } }, why: { type: "string" } } } },
       tips: { type: "array", items: { type: "string" } }
     }
