@@ -135,7 +135,7 @@ window.OTI = (() => {
   function select(item) {
     if (selected && selected !== item) selected.excluded = excluded;   // exclusions stay with their outfit
     selected = item; image = item ? item.image : null;
-    variants = []; $("variantsOut").innerHTML = ""; remix = false; lookup = new Map();
+    variants = []; $("variantsOut").innerHTML = ""; video = null; $("videoOut").innerHTML = ""; remix = false; lookup = new Map();
     if (item && item.result) { result = item.result; excluded = item.excluded || new Set(); current = catalog.find(e => e.id === item.entryId) || null; headerFor = undefined; render(); }
     else { result = null; excluded = new Set(); current = null; showPending(item); }
     renderQueue();
@@ -143,9 +143,23 @@ window.OTI = (() => {
   function showPending(item) {
     $("out").hidden = true; $("outputControls").hidden = true; $("empty").hidden = false;
     $("mapWrap").hidden = true; $("mapEmpty").hidden = false; $("ideasWrap").hidden = true; $("ideasEmpty").hidden = false;
+    showPicture();
     if (!item) { $("empty").textContent = "Results will show up here as grouped, toggleable tags."; return; }
-    const msg = item.status === "reading" ? "Reading this outfit…" : item.status === "failed" ? "Failed: " + item.error : `Not read yet. Click “${runLabel()}”.`;
-    $("empty").innerHTML = `<img src="${item.image.dataUrl}" alt="" style="max-height:260px;max-width:100%;border-radius:8px;display:block;margin:0 auto 8px"><span>${esc(msg)}</span>`;
+    $("empty").textContent = item.status === "reading" ? "Reading this outfit…" : item.status === "failed" ? "Failed: " + item.error : `Not read yet. Click “${runLabel()}”.`;
+  }
+  // The photo panel shows the picture being worked on at a readable size: the selected queue photo, else the opened outfit's kept picture.
+  let pictureFor = null;
+  async function picture() {
+    if (selected && selected.image) return selected.image.preview || selected.image.dataUrl;
+    if (current) return await previews().get(current.id);
+    return null;
+  }
+  async function showPicture() {
+    const key = selected || current || null; pictureFor = key;
+    const pic = await picture(); if (pictureFor !== key) return;          // something else was picked meanwhile
+    $("bigpic").hidden = !pic; if (!pic) return;
+    if ($("bigImg").src !== pic) $("bigImg").src = pic;
+    $("bigName").textContent = selected ? selected.name : current ? current.name + (current.sourceName && current.sourceName.replace(/\.[^.]+$/, "") !== current.name ? " · " + current.sourceName : "") : "";
   }
   function removeItem(item) {
     if (item.status === "reading") { setStatus("Wait for this outfit to finish reading.", "warn"); return; }
@@ -249,6 +263,45 @@ window.OTI = (() => {
       const b4 = btn("Copy description", () => copy(words, "Variant description copied."));
       row.append(b1, b2, b3, b4); card.appendChild(row); out.appendChild(card);
     });
+  }
+
+  // ======================= video prompts (MiniMax Hailuo) =======================
+  let video = null;   // { seconds, direction, takes: [{title, prompt, camera, why}], tips }
+  // The picture as the model should receive it: the queued photo, else the kept 768px copy of a saved outfit.
+  async function modelImage() {
+    if (selected && selected.image && selected.result === result) return selected.image;
+    const pic = await picture(); if (!pic) return null;
+    const blob = await (await fetch(pic)).blob();
+    return { dataUrl: pic, mediaType: blob.type || "image/jpeg", base64: pic.split(",")[1], blob, w: 0, h: 0, name: current?.name || "outfit" };
+  }
+  async function makeVideo() {
+    if (!result) return;
+    if (!(await P().ready())) { setStatus(P().unavailableMessage || "The model provider is not available.", "bad"); return; }
+    const seconds = Number($("videoLen").value) || 6, direction = $("videoDir").value.trim();
+    $("videoBtn").disabled = true; $("videoOut").innerHTML = '<p class="tiny">Writing three video prompts… (15–40 s)</p>';
+    try {
+      const img = await modelImage();
+      const r = await P().interpret({ image: img, prompt: C.videoPrompt(result, direction, seconds) + (img ? "" : "\n(No picture is attached this time; work from the breakdown alone.)"), schema: C.VIDEO_SCHEMA, fresh: true });
+      const takes = (r.json.takes || []).slice(0, 3).map(t => ({ title: t.title || "Take", prompt: (t.prompt || "").trim(), camera: Array.isArray(t.camera) ? t.camera : [], why: t.why || "" }));
+      video = { seconds, direction, takes, tips: Array.isArray(r.json.tips) ? r.json.tips.slice(0, 5) : [], ts: Date.now() };
+      if (current) { current.video = clone(video); saveCatalog(); }   // keeps the prompts with the outfit
+      renderVideo();
+    } catch (e) { console.error(e); $("videoOut").innerHTML = `<p class="tiny" style="color:var(--bad)">${esc(P().errorMessage ? P().errorMessage(e) : (e.message || e.code || "failed"))}</p>`; }
+    finally { $("videoBtn").disabled = false; }
+  }
+  function renderVideo() {
+    const out = $("videoOut"); out.innerHTML = "";
+    if (!video || !video.takes.length) return;
+    const head = document.createElement("p"); head.className = "tiny"; head.textContent = `${video.seconds} s clips${video.direction ? " · " + video.direction : ""}. Paste one into Hailuo's image-to-video with this picture as the first frame.`; out.appendChild(head);
+    video.takes.forEach(t => {
+      const card = document.createElement("div"); card.className = "vcard";
+      const html = esc(t.prompt).replace(/\[([^\]]{1,40})\]/g, "<b>[$1]</b>");   // the camera commands stand out
+      card.innerHTML = `<h4>${esc(t.title)}</h4><div class="vprompt">${html}</div><div class="tiny">${esc(t.why)}${t.camera.length ? " · camera: " + esc(t.camera.join(" → ")) : ""}</div>`;
+      const row = document.createElement("div"); row.className = "row";
+      row.append(btn("Copy prompt", () => copy(t.prompt, `Copied the “${t.title}” video prompt.`)));
+      card.appendChild(row); out.appendChild(card);
+    });
+    if (video.tips.length) { const ul = document.createElement("ul"); ul.className = "vtips"; video.tips.forEach(x => { const li = document.createElement("li"); li.textContent = x; ul.appendChild(li); }); out.appendChild(ul); }
   }
 
   // ======================= tag validation =======================
@@ -398,6 +451,7 @@ window.OTI = (() => {
     $("empty").hidden = true; $("out").hidden = false; $("outputControls").hidden = false;
     const f = formatted(result); $("prompt").textContent = f.prompt; renderSentenceNote(f); $("desc").textContent = result.description;
     $("remixBar").classList.toggle("on", remix); $("remixBtn").textContent = remix ? "Done remixing" : "Remix";
+    showPicture();
     const g = $("groups"); g.innerHTML = "";
     const addGroup = (title, meta, list, conf, onDelete, extra) => {
       if (!list.length && !remix) return;
@@ -557,7 +611,7 @@ window.OTI = (() => {
     catalog.push(e); while (catalog.length > 150) { const v = catalog.findIndex(x => !x.fav); if (v < 0) break; catalog.splice(v, 1); }
     saveCatalog(); return e;
   }
-  function openEntry(e) { if (selected) { selected.excluded = excluded; selected = null; renderQueue(); } current = e; headerFor = undefined; result = clone(e.result); excluded = new Set(C.unverifiedIdentity(result)); remix = false; lookup = new Map(); variants = []; $("variantsOut").innerHTML = ""; if (tab === "catalog" || tab === "settings") showTab("tags"); render(); setStatus(`Opened “${e.name}”.`, "ok"); }
+  function openEntry(e) { if (selected) { selected.excluded = excluded; selected = null; renderQueue(); } current = e; headerFor = undefined; result = clone(e.result); excluded = new Set(C.unverifiedIdentity(result)); remix = false; lookup = new Map(); variants = []; $("variantsOut").innerHTML = ""; video = e.video ? clone(e.video) : null; renderVideo(); if (tab === "catalog" || tab === "settings") showTab("tags"); render(); setStatus(`Opened “${e.name}”.`, "ok"); }
   let headerFor = undefined; // which entry the header inputs were last filled from
   function renderCurrentHeader() {
     const h = $("currentHeader"); h.hidden = false;
@@ -657,6 +711,8 @@ window.OTI = (() => {
     $("copyJson").addEventListener("click", () => copy(JSON.stringify(exportObj(), null, 2), "JSON copied."));
     $("dlJson").addEventListener("click", () => download((current?.name || "outfit").replace(/[^\w.-]+/g, "_") + ".tags.json", JSON.stringify(exportObj(), null, 2)));
     $("variantsBtn").addEventListener("click", makeVariants);
+    $("videoBtn").addEventListener("click", makeVideo);
+    $("bigImg").addEventListener("click", () => $("bigpic").classList.toggle("full"));
     $("checkBtn").addEventListener("click", checkTags);
     $("remixBtn").addEventListener("click", () => { remix = !remix; render(); if (remix) setStatus("Remix mode: × deletes tags, add tags per group, swap garments from the catalog, then save.", "ok"); });
     if (P().download === undefined && P().hideDownload) $("dlJson").hidden = true;

@@ -61,6 +61,10 @@
   }
   .drop.over { border-color: var(--accent); background: var(--chip); }
   .drop img { max-width: 100%; max-height: 380px; border-radius: 8px; display: block; }
+  .bigpic { margin: 0; }
+  .bigpic img { display: block; width: 100%; max-height: 62vh; object-fit: contain; border-radius: 10px; background: var(--chip); cursor: zoom-in; }
+  .bigpic.full img { max-height: none; cursor: zoom-out; }
+  .bigpic figcaption { margin-top: 4px; }
   .drop input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 0; }
   .drop .pick { display: inline-block; margin-top: 10px; padding: 8px 14px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-weight: 600; pointer-events: none; }
   .qcount { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: normal; }
@@ -161,6 +165,11 @@
   .current .tiny { margin-bottom: 6px; }
   .vcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
   .vcard h4 { margin: 0 0 2px; font-size: 14px; }
+  .ideasH { margin: 6px 0 0; font-size: 14px; }
+  .ideasH .meta { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  .vcard .vprompt { margin: 6px 0; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; background: var(--chip); border-radius: 8px; padding: 8px 10px; }
+  .vcard .vprompt b { color: var(--accent); font-weight: 600; }
+  .vtips { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); } .vtips li { margin: 2px 0; }
   .vcard .vdesc { margin: 2px 0 6px; font-size: 13.5px; line-height: 1.5; color: var(--ink); max-width: 70ch; }
   .vtags { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
   .catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
@@ -200,7 +209,7 @@
   <nav class="tabs" id="tabs" aria-label="Sections">
     <button type="button" data-tab="tags" class="on" aria-pressed="true">Tags</button>
     <button type="button" data-tab="map" aria-pressed="false">Map</button>
-    <button type="button" data-tab="ideas" aria-pressed="false">New outfits</button>
+    <button type="button" data-tab="ideas" aria-pressed="false">Ideas</button>
     <button type="button" data-tab="catalog" aria-pressed="false">Catalog <span class="count" id="catCount"></span></button>
     <button type="button" data-tab="settings" aria-pressed="false">Settings</button>
   </nav>
@@ -213,6 +222,10 @@
       <input type="file" id="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/*" title="Choose images">
     </label>
     <div class="queue" id="queue"></div>
+    <figure class="bigpic" id="bigpic" hidden>
+      <img id="bigImg" alt="The outfit photo" title="Click to toggle the full size">
+      <figcaption class="tiny" id="bigName"></figcaption>
+    </figure>
     <div class="row tight"><button class="small" id="pickBtn" type="button">Choose images…</button><button class="small" id="clearQueue" type="button" hidden>Clear queue</button><span class="hint" id="imgInfo"></span></div>
     <details>
       <summary>Phone fallback: paste an image here</summary>
@@ -318,13 +331,22 @@
     </div>
 
     <div class="tab" data-tab="ideas" hidden>
-      <div class="tiny" id="ideasEmpty" style="text-align:center;padding:40px 0">Read or open an outfit first, then design new ones from it here.</div>
-      <div id="ideasWrap" hidden>
+      <div class="tiny" id="ideasEmpty" style="text-align:center;padding:40px 0">Read or open an outfit first, then design new outfits and video prompts from it here.</div>
+      <div id="ideasWrap" hidden class="stack">
+        <h3 class="ideasH">New outfits</h3>
         <div class="row">
           <div><label for="variantDir">Direction (optional)</label><input type="text" id="variantDir" placeholder="e.g. make it winter, more gothic, idol stage outfit, keep the colors"></div>
           <div style="flex:0 1 auto"><button class="small primary" id="variantsBtn">Design 3 variants</button></div>
         </div>
         <div id="variantsOut"></div>
+        <h3 class="ideasH">Video prompts <span class="meta">for MiniMax Hailuo</span></h3>
+        <p class="tiny" style="margin:0">Three ways to bring this picture to life as an image-to-video clip, written for Hailuo: motion only (the picture is the first frame), one main action, camera moves in [brackets].</p>
+        <div class="row">
+          <div><label for="videoDir">What should happen (optional)</label><input type="text" id="videoDir" placeholder="e.g. she turns to the camera and smiles, wind, walks toward us, rain starts"></div>
+          <div style="flex:0 0 auto"><label for="videoLen">Length</label><select id="videoLen"><option value="6">6 s</option><option value="10">10 s</option></select></div>
+          <div style="flex:0 1 auto;align-self:flex-end"><button class="small primary" id="videoBtn">Write 3 video prompts</button></div>
+        </div>
+        <div id="videoOut"></div>
       </div>
     </div>
 

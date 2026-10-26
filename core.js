@@ -265,6 +265,38 @@ self.OTI_CORE = (() => {
     const prose = composeProse(res, excluded);
     return { prose, caption: prose.split(/(?<=\.)\s/)[0], composed: true, stale: false };
   }
+  // Image-to-video prompts for MiniMax Hailuo: the picture is the first frame, so the prompt carries motion only.
+  const VIDEO_SCHEMA = {
+    type: "object", additionalProperties: false, required: ["takes", "tips"],
+    properties: {
+      takes: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["title", "prompt", "camera", "why"],
+        properties: { title: { type: "string" }, prompt: { type: "string" }, camera: { type: "array", items: { type: "string" } }, why: { type: "string" } } } },
+      tips: { type: "array", items: { type: "string" } }
+    }
+  };
+  const HAILUO_CAMERA = ["Push in", "Pull out", "Pan left", "Pan right", "Tilt up", "Tilt down", "Zoom in", "Zoom out", "Truck left", "Truck right", "Pedestal up", "Pedestal down", "Tracking shot", "Static shot", "Shake"];
+  function videoPrompt(res, direction, seconds) {
+    const outfit = res.outfit.map(o => ({ item: o.item, material: o.material, tags: o.tags.slice(0, 4) }));
+    const scene = res.scene || {};
+    return [
+      "You write image-to-video prompts for MiniMax Hailuo (Director / 2.3 / H3). The attached picture will be the FIRST FRAME of a " + seconds + "-second clip; this outfit breakdown describes it.",
+      "Write THREE takes, each a complete prompt ready to paste:",
+      "- 'Subtle': the picture barely comes alive: breathing, a blink, hair and fabric stirring, a slow camera drift. Safest for keeping the face and outfit identical.",
+      "- 'Showcase': the character presents the outfit: a turn, a step, a pose change or a hand gesture that shows the garments, with a camera move that follows.",
+      "- 'Dynamic': a clear action with energy (wind, walking toward the camera, a spin, weather or light changing), still one main action.",
+      direction ? "- The user wants this to happen; build all three around it in rising intensity: " + direction : "",
+      "Rules for every prompt:",
+      "- Motion only. Do NOT re-describe what the picture already shows (colors, clothes, background); name things only to say how they move.",
+      "- Lead with the subject's one main action, then secondary motion drawn from the actual garments (how " + (outfit.map(o => o.item).filter(Boolean).slice(0, 4).join(", ") || "the clothes") + " would move: swaying, fluttering, swinging, catching light), then environment motion (" + ((scene.background_tags || []).slice(0, 3).join(", ") || "background") + ") and light.",
+      "- Camera moves go in square brackets at the point they happen, using only these commands: " + HAILUO_CAMERA.map(c => "[" + c + "]").join(", ") + ". One or two per take; pair every camera move with an action so it does not become a generic zoom. Big moves on faces cause identity drift: keep face-close moves slow.",
+      "- Keep identity stable: end each prompt with a short clause that the character, outfit and colors stay exactly as in the image.",
+      "- " + seconds + " seconds: fit the amount of action to the time (6 s: one beat; 10 s: a beat and a follow-through). No scene cuts, no new characters, no text or captions, no morphing between outfits.",
+      "- Plain, concrete English, present tense, 40-110 words per prompt. Mention speed words (slowly, gently, quickly).",
+      "- camera: the bracket commands used in that take, in order. why: ONE sentence on when to pick this take.",
+      "- tips: 3 to 5 short tips specific to THIS picture (e.g. long skirt swings, so keep spins slow; backlit hair flares when the camera pushes in; the framing leaves room for a tilt up).",
+      "", "Outfit breakdown JSON:", JSON.stringify({ subject: res.subject, outfit, style_tags: res.style_tags, framing_tags: res.framing_tags, scene: { lighting: scene.lighting_tags || [], colors: scene.color_tags || [], aesthetic: scene.aesthetic_tags || [] } })
+    ].filter(Boolean).join("\n");
+  }
   const SENTENCE_SCHEMA = { type: "object", additionalProperties: false, required: ["caption", "prose"], properties: { caption: { type: "string" }, prose: { type: "string" } } };
   function sentencePrompt(res, excluded) {
     const keep = (t) => !(excluded && excluded.has(t));
@@ -389,5 +421,5 @@ self.OTI_CORE = (() => {
     return out;
   }
 
-  return { ITEM_SCHEMA, IMAGE_ITEM_SCHEMA, REGION_SCHEMA, SCENE_GROUPS, IDENTITY_SCHEMA, unverifiedIdentity, focusParts, region, previews, annotations, SCHEMA, VARIANTS_SCHEMA, SENTENCE_SCHEMA, swapName, verifyIdentity, contextLines, RULES, PRESETS, NON_OUTFIT, interpretPrompt, variantsPrompt, sentencePrompt, normalizeResult, orderedTags, presetOf, emph, tagSig, sentencesFor, composeProse, formatPrompt };
+  return { ITEM_SCHEMA, IMAGE_ITEM_SCHEMA, REGION_SCHEMA, SCENE_GROUPS, IDENTITY_SCHEMA, unverifiedIdentity, focusParts, region, previews, annotations, SCHEMA, VARIANTS_SCHEMA, VIDEO_SCHEMA, HAILUO_CAMERA, videoPrompt, SENTENCE_SCHEMA, swapName, verifyIdentity, contextLines, RULES, PRESETS, NON_OUTFIT, interpretPrompt, variantsPrompt, sentencePrompt, normalizeResult, orderedTags, presetOf, emph, tagSig, sentencesFor, composeProse, formatPrompt };
 })();
