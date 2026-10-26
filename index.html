@@ -168,7 +168,7 @@
   .ideasH { margin: 6px 0 0; font-size: 14px; }
   .ideasH .meta { font-weight: 400; color: var(--muted); font-size: 12.5px; }
   .vcard .vprompt { margin: 6px 0; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; background: var(--chip); border-radius: 8px; padding: 8px 10px; }
-  .vcard .vprompt b { color: var(--accent); font-weight: 600; }
+  .vcard .vprompt b { color: var(--accent); font-weight: 600; } .vcard .vprompt i { font-style: normal; color: var(--muted); }
   .vtips { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); } .vtips li { margin: 2px 0; }
   .vcard .vdesc { margin: 2px 0 6px; font-size: 13.5px; line-height: 1.5; color: var(--ink); max-width: 70ch; }
   .vtags { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
@@ -340,10 +340,10 @@
         </div>
         <div id="variantsOut"></div>
         <h3 class="ideasH">Video prompts <span class="meta">for MiniMax Hailuo</span></h3>
-        <p class="tiny" style="margin:0">Three ways to bring this picture to life as an image-to-video clip, written for Hailuo: motion only (the picture is the first frame), one main action, camera moves in [brackets].</p>
+        <p class="tiny" style="margin:0">Three ways to bring this picture to life as an image-to-video clip, written for Hailuo: the picture handles the looks, the prompt directs what happens: a one-sentence anchor, the motion in order, secondary motion, one camera move, style and exclusions, then matching sound and music.</p>
         <div class="row">
           <div><label for="videoDir">What should happen (optional)</label><input type="text" id="videoDir" placeholder="e.g. she turns to the camera and smiles, wind, walks toward us, rain starts"></div>
-          <div style="flex:0 0 auto"><label for="videoLen">Length</label><select id="videoLen"><option value="6">6 s</option><option value="10">10 s</option></select></div>
+          <div style="flex:0 0 auto"><label for="videoLen">Length</label><select id="videoLen"><option value="5">5 s</option><option value="6" selected>6 s</option><option value="10">10 s</option></select></div>
           <div style="flex:0 1 auto;align-self:flex-end"><button class="small primary" id="videoBtn">Write 3 video prompts</button></div>
         </div>
         <div id="videoOut"></div>

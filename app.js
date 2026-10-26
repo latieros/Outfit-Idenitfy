@@ -282,7 +282,7 @@ window.OTI = (() => {
     try {
       const img = await modelImage();
       const r = await P().interpret({ image: img, prompt: C.videoPrompt(result, direction, seconds) + (img ? "" : "\n(No picture is attached this time; work from the breakdown alone.)"), schema: C.VIDEO_SCHEMA, fresh: true });
-      const takes = (r.json.takes || []).slice(0, 3).map(t => ({ title: t.title || "Take", prompt: (t.prompt || "").trim(), camera: Array.isArray(t.camera) ? t.camera : [], why: t.why || "" }));
+      const takes = (r.json.takes || []).slice(0, 3).map(t => ({ title: t.title || "Take", description: (t.description || "").trim(), soundscape: (t.soundscape || "").trim(), music: (t.music || "").trim(), camera: typeof t.camera === "string" ? t.camera : "", why: t.why || "" }));
       video = { seconds, direction, takes, tips: Array.isArray(r.json.tips) ? r.json.tips.slice(0, 5) : [], ts: Date.now() };
       if (current) { current.video = clone(video); saveCatalog(); }   // keeps the prompts with the outfit
       renderVideo();
@@ -292,13 +292,14 @@ window.OTI = (() => {
   function renderVideo() {
     const out = $("videoOut"); out.innerHTML = "";
     if (!video || !video.takes.length) return;
-    const head = document.createElement("p"); head.className = "tiny"; head.textContent = `${video.seconds} s clips${video.direction ? " · " + video.direction : ""}. Paste one into Hailuo's image-to-video with this picture as the first frame.`; out.appendChild(head);
+    const head = document.createElement("p"); head.className = "tiny"; head.textContent = `${video.seconds} s clips${video.direction ? " · " + video.direction : ""}. Paste a block into Hailuo's image-to-video with this picture as the first frame.`; out.appendChild(head);
     video.takes.forEach(t => {
+      if (!t.description && t.prompt) { t.description = t.prompt; }        // prompts written before the three-field layout
       const card = document.createElement("div"); card.className = "vcard";
-      const html = esc(t.prompt).replace(/\[([^\]]{1,40})\]/g, "<b>[$1]</b>");   // the camera commands stand out
-      card.innerHTML = `<h4>${esc(t.title)}</h4><div class="vprompt">${html}</div><div class="tiny">${esc(t.why)}${t.camera.length ? " · camera: " + esc(t.camera.join(" → ")) : ""}</div>`;
+      const field = (k, v) => `<b>${k}:</b> ${esc(v).replace(/\[Shot \d+\]/g, "<i>$&</i>")}`;
+      card.innerHTML = `<h4>${esc(t.title)}</h4><div class="vprompt">${field("integrated_multimodal_description", t.description)}${t.soundscape ? "\n\n" + field("overall_soundscape", t.soundscape) : ""}${t.music ? "\n\n" + field("non_diegetic_music", t.music) : ""}</div><div class="tiny">${esc(t.why)}${t.camera ? " · camera: " + esc(t.camera) : ""}</div>`;
       const row = document.createElement("div"); row.className = "row";
-      row.append(btn("Copy prompt", () => copy(t.prompt, `Copied the “${t.title}” video prompt.`)));
+      row.append(btn("Copy all three fields", () => copy(C.videoText(t), `Copied the “${t.title}” video prompt.`)), btn("Copy description only", () => copy(t.description, `Copied the “${t.title}” description.`)));
       card.appendChild(row); out.appendChild(card);
     });
     if (video.tips.length) { const ul = document.createElement("ul"); ul.className = "vtips"; video.tips.forEach(x => { const li = document.createElement("li"); li.textContent = x; ul.appendChild(li); }); out.appendChild(ul); }
