@@ -34,7 +34,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://lopxfi.github.io/Photo-Tools-Personal/outfit-tags.html*"
+        "https://latieros.github.io/Photo-Tools-Personal/outfit-tags.html*"
       ],
       "js": [
         "bridge.js"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the Photo Tools copy of the interpreter: one self-contained page, outfit-tags.html.
 
-Photo Tools (github.com/lopxfi/Photo-Tools-Personal) is a suite of single-page tools that share a head block,
+Photo Tools (github.com/latieros/Photo-Tools-Personal) is a suite of single-page tools that share a head block,
 a light/dark switch, a tool switcher and a look. This takes the shared parts from an existing Photo Tools page,
 so the copy always matches the suite, and inlines this repo's tags.js, core.js and app.js with the
 Photo Tools provider (your API key on the website, your Claude account inside Claude).
